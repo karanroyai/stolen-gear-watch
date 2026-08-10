@@ -1,0 +1,35 @@
+# Secrets and local config - never commit real watched-item data or credentials
+.env
+config/watched_items.yaml
+config/settings.yaml
+*.local.yaml
+
+# Runtime data
+*.db
+*.sqlite
+*.sqlite3
+data/
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Local Claude Code settings (machine-specific, not project config)
+.claude/

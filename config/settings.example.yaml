@@ -1,0 +1,47 @@
+# Copy to config/settings.yaml. This file contains no personal data and is
+# safe to commit/share - the actual stolen item lives in watched_items.yaml.
+
+db_path: data/stolen_gear_watch.db
+log_level: INFO       # DEBUG | INFO | WARNING | ERROR
+log_format: json       # json | text
+
+# Minimum fuzzy text-match score (0-1) before a listing counts as a text
+# match. Serial-number matches always count regardless of this threshold.
+match_confidence_threshold: 0.6
+
+# Sent as part of the User-Agent on every request, and used as the
+# contact point site operators can reach if there's an issue - good
+# scraping citizenship. Falls back to SCRAPER_CONTACT_EMAIL in .env if unset.
+scraper_contact_email: null
+
+scrapers:
+  willhaben:
+    enabled: true
+    rate_limit_seconds: 5
+    max_pages: 3
+  kleinanzeigen:
+    enabled: true
+    rate_limit_seconds: 5
+    max_pages: 3
+  limundo:
+    enabled: false   # experimental - see scrapers/limundo.py docstring
+    rate_limit_seconds: 5
+    max_pages: 3
+  kupujemprodajem:
+    enabled: true
+    rate_limit_seconds: 5
+    max_pages: 3
+
+reverse_image:
+  # manual (default, no API key needed) | google_vision | tineye
+  backend: manual
+  min_confidence: 0.75
+
+stolen_registries:
+  enabled:
+    - lenstag
+    - stolen_camera_finder   # always manual-check, see stolen_registries/manual.py
+
+alerting:
+  telegram:
+    enabled: true   # requires TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID in .env

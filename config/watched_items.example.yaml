@@ -1,0 +1,30 @@
+# Copy to config/watched_items.yaml and fill in your real item(s).
+# That file is gitignored from commit 1 - never put real serials/photos
+# in a file that goes into version control.
+
+watched_items:
+  - id: my-camera-body            # stable slug, used as a DB key - don't reuse across items
+    category: camera_body          # camera_body | lens | bike | laptop | ... (free text)
+    make: Canon
+    model: EOS R5
+    serial: "123456789012"         # exact serial if known; omit if you only have make/model
+    aliases:
+      - Canon R5                   # alternate names sellers might use
+    keywords:
+      - grip tape                  # distinguishing marks/accessories that were with it when stolen
+    description: >
+      Stolen from a car in Vienna on 2026-06-01. Has a small scratch on the
+      top-left of the grip and a strip of black gaffer tape on the battery door.
+    reference_photos:
+      - photos/my-camera-body-1.jpg   # local paths, used as query images for reverse image search
+    price_min: 2000
+    price_max: 4500
+    currency: EUR
+    active: true
+
+  - id: my-lens
+    category: lens
+    make: Canon
+    model: RF 24-70mm F2.8L
+    serial: null
+    active: true
