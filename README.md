@@ -1,5 +1,12 @@
 # stolen-gear-watch
 
+> **🚧 Work in progress - not ready for general use.** The architecture is
+> in place and the core (matching, storage, alerting) works, but several
+> marketplace adapters are unverified or experimental - see "What it
+> actually does (and what it doesn't)" below before assuming a site will
+> work. No tagged release yet. Feel free to read the code or open issues,
+> but hold off on relying on this to actually watch for your stolen gear.
+
 Watches classifieds/marketplace sites and public stolen-gear registries for
 an item you've reported stolen, and alerts you on Telegram when something
 looks like a match. Built for cameras first, but nothing in the core is

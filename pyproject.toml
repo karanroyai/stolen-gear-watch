@@ -9,7 +9,7 @@ description = "Watch marketplaces and stolen-gear registries for a serialized it
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
-authors = [{ name = "stolen-gear-watch contributors" }]
+authors = [{ name = "Karan Roy" }]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
