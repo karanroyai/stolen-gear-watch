@@ -101,11 +101,15 @@ present a guessed CSS selector as if it were confirmed working.
 
 ### 6. Tests
 
-Adapter HTML/JSON parsing (the `_parse_card`-style methods) should be
-unit-testable against a saved fixture of real response HTML/JSON, without
-hitting the network. Network calls themselves (`self._get`) don't need
-mocking in every test - just the parsing logic. See `tests/` for the
-existing test style (plain `pytest`, no special fixtures required).
+Not required for the adapter itself. This project isn't aiming for high
+test coverage on individual scrapers - marketplace HTML changes out from
+under you regardless of how well-tested the parsing code was, and it gets
+fixed ad hoc when someone notices an adapter returning nothing. `tests/`
+is reserved for the structural stuff that doesn't drift on its own:
+`core/` (models, config, db), `matching/`, and shared infrastructure like
+`net.py`'s robots.txt/rate-limit enforcement. If you're adding to one of
+those, a test is expected; if you're adding a marketplace adapter, it
+isn't.
 
 ## What we won't merge
 
