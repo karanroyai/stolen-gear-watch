@@ -34,13 +34,17 @@ module docstrings for the full reasoning, summarized here:
 
 2. **Marketplace scraping**, config-driven, one adapter class per site.
    Ships with Willhaben (AT), Kleinanzeigen (DE), Limundo (RS), and
-   KupujemProdajem (RS). **Some of these are experimental** - Willhaben in
-   particular blocked even a single automated request while this was being
-   built, a strong sign of active bot-detection. This project deliberately
-   does not build evasion around that; if an adapter stops working, treat
-   that site as a manual-check target rather than trying to work around
-   the block. See each adapter's module docstring for its verification
-   status.
+   KupujemProdajem (RS). **Willhaben is disabled by default and won't
+   return results**: its robots.txt explicitly forbids automated access
+   ("It is expressively forbidden to use spiders, search robots or other
+   automatic methods...") and disallows the search query pattern this
+   adapter needs, so `Adapter._get()` refuses every request itself -
+   this was verified directly against the live robots.txt, not guessed.
+   Limundo is also unverified/experimental (got an HTTP 403 during
+   testing). This project deliberately does not build evasion around
+   either case; if a site doesn't want to be scraped, treat it as a
+   manual-check target. See each adapter's module docstring for its
+   verification status.
 
 3. **Reverse image search.** Scraping Google Lens/Images directly is out
    of scope (against ToS, fragile, real risk). Instead this wraps official
@@ -130,6 +134,10 @@ right answer is a documented manual-check step, not a workaround - see
 
 - Every request goes through `robots.txt` checking and per-site rate
   limiting (`net.py`), never raw `requests` calls from adapter code.
+  Parsing uses `protego`, not stdlib `urllib.robotparser` - the stdlib
+  parser only does literal prefix matching and silently ignores `*`/`$`
+  wildcards, which is how most real robots.txt files actually express
+  their rules (Willhaben's is a good example - see `scrapers/willhaben.py`).
 - The User-Agent identifies this tool and an optional contact email
   (`SCRAPER_CONTACT_EMAIL` in `.env`) so a site operator can reach you.
 - No CAPTCHA solving, no residential proxies, no browser fingerprint

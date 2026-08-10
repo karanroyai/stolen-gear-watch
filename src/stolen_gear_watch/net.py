@@ -3,6 +3,14 @@ limiting, and a User-Agent that identifies this tool and an optional
 contact address. Used by both marketplace scrapers and stolen-registry
 checkers so that policy (don't hit sites that disallow it, don't hammer
 them) lives in exactly one place.
+
+Uses `protego` (the parser Scrapy uses) rather than stdlib
+`urllib.robotparser` for robots.txt parsing. The stdlib parser only does
+literal path-prefix matching and silently ignores `*`/`$` wildcards -
+which is how most real-world robots.txt files (including every site this
+project ships an adapter for) express their actual rules. Under the
+stdlib parser, a rule like `Disallow: /*?*keyword=*` never matches
+anything, which would make every disallowed search URL look allowed.
 """
 
 from __future__ import annotations
@@ -10,9 +18,9 @@ from __future__ import annotations
 import logging
 import time
 from urllib.parse import urljoin
-from urllib.robotparser import RobotFileParser
 
 import requests
+from protego import Protego
 
 from stolen_gear_watch import __version__
 
@@ -52,35 +60,37 @@ class PoliteHttpClient:
         self._rate_limiter = RateLimiter(rate_limit_seconds)
         self._robots = self._load_robots()
 
-    def _load_robots(self) -> RobotFileParser:
-        rp = RobotFileParser()
-        rp.set_url(urljoin(self.base_url, "/robots.txt"))
+    def _load_robots(self) -> Protego | None:
+        robots_url = urljoin(self.base_url, "/robots.txt")
         try:
-            rp.read()
-        except OSError as exc:
+            resp = requests.get(robots_url, headers={"User-Agent": self._user_agent()}, timeout=15)
+            resp.raise_for_status()
+        except requests.RequestException as exc:
             logger.warning(
                 "Could not fetch robots.txt for %s (%s); proceeding cautiously "
                 "but this should be investigated before relying on this client.",
                 self.base_url,
                 exc,
             )
-        return rp
+            return None
+        return Protego.parse(resp.text)
 
     def _user_agent(self) -> str:
         contact = f"; contact: {self.contact_email}" if self.contact_email else ""
         return f"stolen-gear-watch/{__version__} (+{PROJECT_URL}{contact})"
 
     def _get(self, url: str, params: dict | None = None) -> requests.Response:
-        if not self._robots.can_fetch(self._user_agent(), url):
+        # Build the exact URL requests will fetch (including the query
+        # string from `params`) before checking robots.txt - a lot of
+        # real-world disallow rules target query parameters specifically,
+        # so checking the bare path would miss them entirely.
+        full_url = requests.Request(url=url, params=params).prepare().url
+
+        if self._robots is not None and not self._robots.can_fetch(full_url, self._user_agent()):
             raise RobotsDisallowedError(
-                f"{url} is disallowed by {self.base_url}/robots.txt for this client"
+                f"{full_url} is disallowed by {self.base_url}/robots.txt for this client"
             )
         self._rate_limiter.wait()
-        resp = requests.get(
-            url,
-            params=params,
-            headers={"User-Agent": self._user_agent()},
-            timeout=20,
-        )
+        resp = requests.get(full_url, headers={"User-Agent": self._user_agent()}, timeout=20)
         resp.raise_for_status()
         return resp

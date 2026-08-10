@@ -1,20 +1,22 @@
 """Adapter for willhaben.at (Austria).
 
-STATUS: experimental / needs manual verification. While building this
-project, automated fetches to willhaben.at were blocked outright (not
-just slow - refused) even for a single robots.txt request, which is a
-strong signal they run active bot-detection in front of the site. A
-plain `requests`-based adapter may simply not work here regardless of
-how correct the selectors are.
+STATUS: confirmed disallowed, not just unverified. willhaben.at is
+reachable fine over plain HTTP - there's no bot-detection blocking a
+normal request. But its robots.txt (checked directly, not guessed at)
+opens with "It is expressively forbidden to use spiders, search robots
+or other automatic methods to access willhaben.at," and its `Disallow`
+rules - which are almost all `*`-wildcard query-string patterns, e.g.
+`Disallow: /*?*keyword=*` - do cover the search endpoint this adapter
+needs. (Note: this only shows up correctly with a wildcard-aware robots
+parser; stdlib `urllib.robotparser` does plain prefix matching and
+silently ignores every wildcard rule, which made this site look allowed
+during earlier testing - see `net.py`'s docstring.)
 
-Rather than guess at evasion techniques (which this project deliberately
-won't build - see README "Scraping ethics"), this adapter does its best
-with a normal HTTP GET and explicitly detects and logs when it looks like
-it hit a bot-challenge page, so failures are visible instead of silently
-returning zero results. If this keeps failing for you, treat Willhaben as
-a manual-check site: search it yourself periodically, or contribute a
-verified adapter if you find a working approach that doesn't cross into
-active evasion.
+`Adapter._get()` enforces this automatically: every call this adapter
+makes will raise `RobotsDisallowedError` before any request selectors
+even matter. This class is kept as documentation of that fact and in
+case willhaben.at ever relaxes the policy, but it will not return
+results today. Treat Willhaben as a manual-check site.
 """
 
 from __future__ import annotations

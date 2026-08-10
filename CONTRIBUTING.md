@@ -12,9 +12,15 @@ interface is missing something; open an issue before working around it.
 
 ### 1. Check the site's policy before writing any code
 
-- Read `https://<site>/robots.txt`. If the search/listing paths you need
-  are disallowed, stop - don't build the adapter. Either find an allowed
-  path (an official search API, an RSS/JSON feed) or skip the site.
+- Read `https://<site>/robots.txt` yourself, including any `*`/`$`
+  wildcard rules and free-text comments - don't just trust
+  `self._robots.can_fetch()` returning `True` while writing the adapter as
+  proof the site is fine with it. It's checked with `protego`
+  specifically because wildcard rules (very common - see Willhaben's
+  robots.txt) are how sites actually express "don't hit this search
+  endpoint," and a naive parser would miss that. If the paths you need are
+  disallowed, stop - don't build the adapter. Either find an allowed path
+  (an official search API, an RSS/JSON feed) or skip the site.
 - Look for active bot-detection (CAPTCHAs, "attention required" pages,
   requests that get blocked outright even for a single GET). If you hit
   that, don't try to work around it - see "What we won't merge" below.

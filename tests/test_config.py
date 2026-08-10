@@ -5,7 +5,10 @@ from stolen_gear_watch.core.config import load_settings, load_watched_items
 
 def test_load_settings_from_example():
     settings = load_settings("config/settings.example.yaml")
-    assert settings.scrapers["willhaben"].enabled is True
+    # disabled by default - its robots.txt confirmed disallows the search
+    # endpoint this adapter needs, see scrapers/willhaben.py
+    assert settings.scrapers["willhaben"].enabled is False
+    assert settings.scrapers["kleinanzeigen"].enabled is True
     assert settings.reverse_image.backend == "manual"
 
 

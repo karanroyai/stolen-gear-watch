@@ -16,7 +16,7 @@ scraper_contact_email: null
 
 scrapers:
   willhaben:
-    enabled: true
+    enabled: false   # robots.txt confirmed disallows this - see scrapers/willhaben.py docstring
     rate_limit_seconds: 5
     max_pages: 3
   kleinanzeigen:
