@@ -3,6 +3,7 @@
 config/watched_items.yaml
 config/settings.yaml
 *.local.yaml
+photos/
 
 # Runtime data
 *.db

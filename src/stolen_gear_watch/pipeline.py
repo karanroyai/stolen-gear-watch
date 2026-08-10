@@ -144,15 +144,21 @@ def _run_registry_checks(settings: Settings, active_items, db: Database, notifie
 def _send_pending_alerts(
     db: Database, notifiers, items_by_id: dict[str, WatchedItem]
 ) -> None:
+    # Only mark a match alerted once it's actually been delivered. With no
+    # notifiers configured (e.g. Telegram not set up yet) or a notifier that
+    # errors, matches must stay unalerted - otherwise they're lost forever
+    # the moment alerting does get configured, instead of being sent then.
     for match in db.unalerted_matches():
         listing = db.get_listing(match.listing_id)
         item = items_by_id.get(match.watched_item_id)
         if listing is None or item is None:
             continue
+        sent = False
         for notifier in notifiers:
             try:
                 notifier.send(match, listing, item)
+                sent = True
             except Exception:
                 logger.exception("Failed to send alert for match %s", match.id)
-                continue
-        db.mark_alerted(match.id)
+        if sent:
+            db.mark_alerted(match.id)
