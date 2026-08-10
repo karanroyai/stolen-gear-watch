@@ -120,7 +120,11 @@ isn't.
   `stolen_registries/manual.py` for the pattern used for services that
   can't be automated at all), not a workaround.
 - Adapters that ignore `robots.txt` or hardcode around the `Adapter` base
-  class's robots/rate-limit enforcement.
+  class's robots/rate-limit enforcement in code. The only sanctioned way
+  to scrape a site despite its robots.txt is the operator setting
+  `respect_robots_txt: false` themselves in their own `settings.yaml` -
+  see README "Scraping ethics." Adapter code should never set that for
+  the user, default to it, or work around `_get()` to avoid it.
 - Scraping Google Images/Lens directly (see `reverse_image/base.py` for
   why - use the official Vision/TinEye API backends instead).
 

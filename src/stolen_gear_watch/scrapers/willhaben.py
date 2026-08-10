@@ -16,7 +16,18 @@ during earlier testing - see `net.py`'s docstring.)
 makes will raise `RobotsDisallowedError` before any request selectors
 even matter. This class is kept as documentation of that fact and in
 case willhaben.at ever relaxes the policy, but it will not return
-results today. Treat Willhaben as a manual-check site.
+results today by default. Treat Willhaben as a manual-check site - or
+look into their native saved-search/"Suchagent" alert feature
+(robots.txt disallows `/iad/searchagent`, which is a strong hint it
+exists), which solves "notify me about new listings" without scraping
+at all.
+
+If you've made your own informed decision to scrape it anyway despite
+the above, that's a config choice, not a code change: set both
+`enabled: true` and `respect_robots_txt: false` for this adapter in your
+own `config/settings.yaml` (see settings.example.yaml). That flag exists
+precisely so this is an explicit, auditable decision an operator makes
+for themselves - not a default, and not something baked into this file.
 """
 
 from __future__ import annotations

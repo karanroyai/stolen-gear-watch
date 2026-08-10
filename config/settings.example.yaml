@@ -19,6 +19,13 @@ scrapers:
     enabled: false   # robots.txt confirmed disallows this - see scrapers/willhaben.py docstring
     rate_limit_seconds: 5
     max_pages: 3
+    # respect_robots_txt defaults to true and isn't set here on purpose - the
+    # shipped example always honors robots.txt. If you've made an informed,
+    # personal decision to scrape Willhaben anyway (their robots.txt
+    # explicitly says not to - this is on you, not something this project
+    # endorses), set both of these in your own config/settings.yaml instead:
+    #   enabled: true
+    #   respect_robots_txt: false
   kleinanzeigen:
     enabled: true
     rate_limit_seconds: 5

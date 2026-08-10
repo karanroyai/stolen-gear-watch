@@ -32,7 +32,11 @@ class Adapter(PoliteHttpClient, ABC):
 
     def __init__(self, settings: ScraperSettings, contact_email: str | None = None):
         self.settings = settings
-        super().__init__(rate_limit_seconds=settings.rate_limit_seconds, contact_email=contact_email)
+        super().__init__(
+            rate_limit_seconds=settings.rate_limit_seconds,
+            contact_email=contact_email,
+            respect_robots_txt=settings.respect_robots_txt,
+        )
 
     @abstractmethod
     def search(self, item: WatchedItem) -> Iterator[RawListing]:

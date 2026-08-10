@@ -56,3 +56,18 @@ def test_unreachable_robots_txt_does_not_crash(caplog):
 
     resp = client._get("https://example.test/search")
     assert resp.text == "ok"
+
+
+@responses.activate
+def test_respect_robots_txt_false_skips_enforcement_and_the_fetch():
+    """respect_robots_txt=False is an explicit opt-out: it should neither
+    fetch robots.txt nor block a disallowed URL. No robots.txt response is
+    registered here at all - if the client tried to fetch it, this test
+    would fail with a ConnectionError from the `responses` mock."""
+    responses.add(
+        responses.GET, "https://example.test/search?keyword=canon", body="ok", status=200
+    )
+    client = _TestClient(rate_limit_seconds=0, respect_robots_txt=False)
+
+    resp = client._get("https://example.test/search", params={"keyword": "canon"})
+    assert resp.text == "ok"

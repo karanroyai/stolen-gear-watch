@@ -27,6 +27,13 @@ class ScraperSettings(BaseModel):
         default=3.0, description="Minimum delay between requests to this site."
     )
     max_pages: int = 5
+    respect_robots_txt: bool = Field(
+        default=True,
+        description="Leave this on unless you've deliberately decided otherwise for a "
+        "specific site. Turning it off does not mean the site allows scraping - it means "
+        "you're choosing to proceed against whatever its robots.txt says, at your own "
+        "risk. See README 'Scraping ethics'.",
+    )
 
 
 class ReverseImageSettings(BaseModel):

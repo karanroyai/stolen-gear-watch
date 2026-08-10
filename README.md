@@ -143,6 +143,17 @@ right answer is a documented manual-check step, not a workaround - see
 - No CAPTCHA solving, no residential proxies, no browser fingerprint
   spoofing to get around detection. If an adapter is blocked, it's
   documented as experimental/manual rather than worked around.
+- `respect_robots_txt` (per adapter, in `settings.yaml`) defaults to
+  `true` everywhere and isn't set to `false` anywhere in the shipped
+  example config. It's an explicit, opt-in escape hatch for operators who
+  decide - for themselves, for their own reasons - to scrape a site
+  despite what its robots.txt says, same idea as Scrapy's
+  `ROBOTSTXT_OBEY`. Turning it off doesn't mean the site allows it; it
+  means you're choosing to proceed anyway, at your own risk (possible
+  ToS violation, IP/account bans, and depending on jurisdiction real
+  legal exposure - this project doesn't have a legal opinion on that for
+  you). This tool will never turn it off for you or suggest a site-specific
+  default of `false`.
 
 ## Development
 

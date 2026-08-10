@@ -51,14 +51,38 @@ class RateLimiter:
 
 class PoliteHttpClient:
     """Mixin providing `self._get()`. Subclasses set `base_url` and pass a
-    rate limit interval to `__init__`."""
+    rate limit interval to `__init__`.
+
+    `respect_robots_txt=False` is an explicit, informed-consent escape
+    hatch - not a default, and not something adapter code should ever set
+    for you. It exists because "the site's robots.txt disallows this" and
+    "you have decided, for your own reasons, to proceed anyway" are two
+    different facts, and this tool shouldn't quietly conflate them or
+    pretend the site said yes. See ScraperSettings.respect_robots_txt and
+    README "Scraping ethics" for how to turn it on.
+    """
 
     base_url: str
 
-    def __init__(self, rate_limit_seconds: float, contact_email: str | None = None):
+    def __init__(
+        self,
+        rate_limit_seconds: float,
+        contact_email: str | None = None,
+        respect_robots_txt: bool = True,
+    ):
         self.contact_email = contact_email
+        self.respect_robots_txt = respect_robots_txt
         self._rate_limiter = RateLimiter(rate_limit_seconds)
-        self._robots = self._load_robots()
+        if respect_robots_txt:
+            self._robots = self._load_robots()
+        else:
+            logger.warning(
+                "respect_robots_txt is disabled for %s - proceeding against "
+                "whatever that site's robots.txt says is a deliberate choice "
+                "made in configuration, not something this tool verified is fine.",
+                self.base_url,
+            )
+            self._robots = None
 
     def _load_robots(self) -> Protego | None:
         robots_url = urljoin(self.base_url, "/robots.txt")
