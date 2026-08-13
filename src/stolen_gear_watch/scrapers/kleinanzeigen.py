@@ -1,15 +1,25 @@
 """Adapter for kleinanzeigen.de (Germany, formerly eBay Kleinanzeigen).
 
-VERIFY BEFORE RELYING ON THIS: selectors target the long-standing
-`article.aditem` listing-card markup this site has used for years, but a
-live check while building this project got network timeouts rather than
-a clean response, so the current markup could not be confirmed directly.
-Inspect a live search results page and update `_parse_card` if this
-starts returning zero results.
+Verified directly against a live search results page (not guessed at -
+an earlier version of this adapter was written after a network timeout
+prevented checking, and its title selector had in fact gone stale: the
+site's been redesigned since, and `.aditem-main--top--title` no longer
+exists anywhere in the markup - titles are now a plain `<h2><a>` with no
+title-specific class).
+
+Rather than just point at the new plain heading, each card also embeds a
+`<script type="application/ld+json">` block with structured `title`,
+`description`, and `contentUrl` (image) fields - use that as the primary
+source since structured data is far less likely to break on the next
+redesign than nested div/class scraping, with the heading text as a
+fallback for cards that lack it. The outer `article.aditem` wrapper,
+`data-adid`/`data-href` attributes, and the price/location selectors are
+all still exactly as they were and don't need this treatment.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Iterator
 
@@ -55,15 +65,21 @@ class KleinanzeigenAdapter(Adapter):
             return None
         url = href if href.startswith("http") else f"{self.base_url}{href}"
 
-        title_el = card.select_one(".aditem-main--top--title")
-        title = title_el.get_text(strip=True) if title_el else None
+        title, description, image_url = self._parse_ld_json(card)
+        if not title:
+            heading = card.select_one("h2 a")
+            title = heading.get_text(strip=True) if heading else None
         if not title:
             return None
 
         price_el = card.select_one(".aditem-main--middle--price-shipping--price")
         price = currency = None
         if price_el:
-            price_text = price_el.get_text(strip=True)
+            # Discounted listings nest a struck-through "old price" <p> inside
+            # this element - get_text() would concatenate both into one
+            # digit string (e.g. "1.699 €" + "1.899 €" -> "16991899"). Take
+            # only the first text node, which is the current price.
+            price_text = next(price_el.stripped_strings, "")
             digits = "".join(c for c in price_text if c.isdigit())
             if digits:
                 price = float(digits)
@@ -73,17 +89,31 @@ class KleinanzeigenAdapter(Adapter):
         location = location_el.get_text(strip=True) if location_el else None
 
         photo_urls = []
-        img = card.find("img")
-        if img and (src := img.get("src") or img.get("data-src")):
-            photo_urls.append(src)
+        if image_url:
+            photo_urls.append(image_url)
+        else:
+            img = card.find("img")
+            if img and (src := img.get("src") or img.get("data-src")):
+                photo_urls.append(src)
 
         return RawListing(
             source_site=self.site_key,
             source_id=source_id,
             url=url,
             title=title,
+            description=description or "",
             price=price,
             currency=currency,
             location=location,
             photo_urls=photo_urls,
         )
+
+    def _parse_ld_json(self, card: Tag) -> tuple[str | None, str | None, str | None]:
+        script = card.find("script", type="application/ld+json")
+        if not script or not script.string:
+            return None, None, None
+        try:
+            data = json.loads(script.string)
+        except json.JSONDecodeError:
+            return None, None, None
+        return data.get("title"), data.get("description"), data.get("contentUrl")
