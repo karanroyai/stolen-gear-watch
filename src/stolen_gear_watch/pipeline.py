@@ -34,7 +34,7 @@ def run(settings: Settings, watched_items: list[WatchedItem], db: Database) -> N
 
     notifiers = get_notifiers(settings)
     image_backend = get_backend(settings.reverse_image)
-    ocr = get_ocr(settings.reverse_image)
+    ocr = get_ocr(settings.ocr)
 
     items_by_id = {item.id: item for item in active_items}
 

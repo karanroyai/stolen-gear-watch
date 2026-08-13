@@ -77,13 +77,26 @@ module docstrings for the full reasoning, summarized here:
    matching already does for free. What's genuinely more targeted: if a
    seller photographs the bottom plate or battery door, the serial number
    is often visible in the photo even when it's never mentioned in the ad
-   text. `matching/ocr.py` reads text out of listing photos via Google
-   Cloud Vision's text detection and checks it against the watched item's
-   serial - same API/credentials as reverse image search's Vision backend,
-   just a different feature, so nothing new to set up if you've already
-   configured `reverse_image.backend: google_vision`. No equivalent exists
-   for the `manual`/`tineye` backends, so this check is simply skipped
-   with either of those rather than producing noise.
+   text. `matching/ocr.py` reads text out of listing photos and checks it
+   against the watched item's serial, controlled by its own `ocr.backend`
+   setting (independent of `reverse_image.backend` - different problem,
+   different choice of engine):
+   - `none` (default) - disabled. No manual-check-link fallback either
+     (unlike reverse image search) - logging a reminder per listing photo
+     would be way too noisy given most photos never show a serial at all.
+   - `google_vision` - Google Cloud Vision's text detection. Same API/
+     credentials as the reverse-image Vision backend, just a different
+     feature - nothing new to set up if you've already configured that.
+     Costs money past the free tier.
+   - `easyocr` - runs entirely locally (free, no account, no per-request
+     cost), using a model built for "text in a photo" rather than scanned
+     documents - a closer match to a serial etched on a camera at an angle
+     than Tesseract's traditional strength. Pulls in PyTorch (a large,
+     slow-to-install dependency) and downloads ~100MB of model weights on
+     first use; after that, on a normal CPU it's roughly a few seconds to
+     load the model once per run plus about a second per photo - fine for
+     a cron job running every few hours, not fine for anything real-time.
+     `pip install stolen-gear-watch[easyocr]` to enable.
 
 ## Quick start
 

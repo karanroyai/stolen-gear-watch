@@ -31,6 +31,9 @@ dependencies = [
 # Reverse image search backends - only needed if you enable them in settings.yaml
 google-vision = ["google-cloud-vision>=3.7"]
 tineye = ["pytineye>=2.1"]
+# Local OCR backend (ocr.backend: easyocr) - free, no account, but pulls in
+# PyTorch and downloads model weights on first use. See matching/ocr.py.
+easyocr = ["easyocr>=1.7"]
 # Playwright is deliberately NOT a base dependency. Add it only if/when a
 # specific scraper adapter needs JS rendering that plain requests can't handle.
 dev = [

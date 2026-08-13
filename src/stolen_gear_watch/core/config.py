@@ -44,6 +44,15 @@ class ReverseImageSettings(BaseModel):
     min_confidence: float = 0.75
 
 
+class OcrSettings(BaseModel):
+    backend: str = Field(
+        default="none",
+        description="none (default, OCR matching disabled) | google_vision | easyocr. "
+        "Independent of reverse_image.backend - you can use a different (or no) engine "
+        "for OCR than for reverse-image web search.",
+    )
+
+
 class TelegramSettings(BaseModel):
     enabled: bool = True
 
@@ -64,6 +73,7 @@ class Settings(BaseModel):
     scraper_contact_email: str | None = None
     scrapers: dict[str, ScraperSettings] = Field(default_factory=dict)
     reverse_image: ReverseImageSettings = ReverseImageSettings()
+    ocr: OcrSettings = OcrSettings()
     alerting: AlertingSettings = AlertingSettings()
     stolen_registries: StolenRegistrySettings = StolenRegistrySettings()
 

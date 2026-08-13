@@ -44,6 +44,13 @@ reverse_image:
   backend: manual
   min_confidence: 0.75
 
+ocr:
+  # Independent of reverse_image.backend above - different problem (read a
+  # serial out of a photo, not "does this image exist elsewhere on the web").
+  # none (default, disabled) | google_vision | easyocr (free, local, no
+  # account - see matching/ocr.py for the tradeoffs)
+  backend: none
+
 stolen_registries:
   enabled:
     - lenstag
