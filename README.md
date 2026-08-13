@@ -38,30 +38,45 @@ module docstrings for the full reasoning, summarized here:
 
 2. **Marketplace scraping**, config-driven, one adapter class per site.
    Ships with Willhaben (AT), Kleinanzeigen (DE), Limundo (RS),
-   KupujemProdajem (RS), and eBay. **Willhaben is disabled by default and
-   won't return results**: its robots.txt explicitly forbids automated
-   access ("It is expressively forbidden to use spiders, search robots or
-   other automatic methods...") and disallows the search query pattern
-   this adapter needs, so `Adapter._get()` refuses every request itself -
-   this was verified directly against the live robots.txt, not guessed.
-   Limundo is also unverified/experimental (got an HTTP 403 during
-   testing). This project deliberately does not build evasion around
-   either case; if a site doesn't want to be scraped, treat it as a
-   manual-check target. **eBay uses their official Browse API**, not
-   scraping - eBay's robots.txt explicitly sanctions "approved... official
-   API" access even while disallowing HTML scraping, unlike every other
-   site here. Needs a free developer.ebay.com account
-   (`EBAY_CLIENT_ID`/`EBAY_CLIENT_SECRET` in `.env`); until those are set
-   it logs a clear error each run rather than crashing. Built against
-   eBay's documented API schema but not yet verified against a live
-   response (no credentials were available to test with) - see
-   `scrapers/ebay.py`'s docstring for exactly what's unconfirmed.
-   Facebook Marketplace was considered and rejected: no public API exists
-   for it, listings require a logged-in session to view, and their
-   robots.txt is a blanket "automated collection prohibited" with no
-   API carve-out - the kind of target this project treats as manual-check
-   only, not something to build an adapter against. See each adapter's
-   module docstring for its verification status.
+   KupujemProdajem (RS), Publi24 (RO), Bazar.bg (BG), and eBay.
+   **Willhaben is disabled by default and won't return results**: its
+   robots.txt explicitly forbids automated access ("It is expressively
+   forbidden to use spiders, search robots or other automatic
+   methods...") and disallows the search query pattern this adapter
+   needs, so `Adapter._get()` refuses every request itself - this was
+   verified directly against the live robots.txt, not guessed. Limundo is
+   also unverified/experimental (got an HTTP 403 during testing).
+   Publi24 and Bazar.bg were both verified live (permissive robots.txt,
+   no bot-wall triggered, correctly parsed real search results across
+   several date/price format variants each). This project deliberately
+   does not build evasion around a blocked site; if it doesn't want to be
+   scraped, treat it as a manual-check target instead. **eBay uses their
+   official Browse API**, not scraping - eBay's robots.txt explicitly
+   sanctions "approved... official API" access even while disallowing
+   HTML scraping, unlike every other site here. Needs a free
+   developer.ebay.com account (`EBAY_CLIENT_ID`/`EBAY_CLIENT_SECRET` in
+   `.env`); until those are set it logs a clear error each run rather
+   than crashing. Built against eBay's documented API schema but not yet
+   verified against a live response (no credentials were available to
+   test with) - see `scrapers/ebay.py`'s docstring for exactly what's
+   unconfirmed.
+
+   **Sites considered and rejected, not just left out**: Facebook
+   Marketplace (no public API, listings require a logged-in session,
+   robots.txt is a blanket "automated collection prohibited" with no API
+   carve-out); OLX (the dominant classifieds group across Poland,
+   Romania, Bulgaria, Ukraine, and Bosnia - would have been the single
+   highest-value addition, but runs a Cloudflare managed-challenge wall,
+   confirmed live, that blocks even a plain robots.txt request); Njuškalo
+   (Croatia) and Bolha (Slovenia) - same platform (Styria Media Group),
+   both run a ShieldSquare/hCaptcha wall, also confirmed live. All three
+   would require actual bot-detection evasion (CAPTCHA-solving, browser
+   fingerprint spoofing) to return anything - a different category of
+   thing from an informed robots.txt override, and not something this
+   project builds regardless of query frequency or how reasonable the
+   underlying goal is. Manual-check candidates, not future adapters.
+
+   See each adapter's module docstring for its verification status.
 
 3. **Reverse image search.** Scraping Google Lens/Images directly is out
    of scope (against ToS, fragile, real risk). Instead this wraps official

@@ -42,6 +42,14 @@ scrapers:
     enabled: false   # unverified schema, needs EBAY_CLIENT_ID/SECRET - see scrapers/ebay.py docstring
     rate_limit_seconds: 2   # official API, not a scraped page - a lighter delay is fine
     max_pages: 3
+  publi24:
+    enabled: true   # Romania - verified live, see scrapers/publi24.py docstring
+    rate_limit_seconds: 5
+    max_pages: 3
+  bazar_bg:
+    enabled: true   # Bulgaria - verified live, see scrapers/bazar_bg.py docstring
+    rate_limit_seconds: 5
+    max_pages: 3
 
 reverse_image:
   # manual (default, no API key needed) | google_vision | tineye
