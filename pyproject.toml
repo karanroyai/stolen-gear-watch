@@ -24,6 +24,7 @@ dependencies = [
     "rapidfuzz>=3.6",
     "python-dotenv>=1.0",
     "protego>=0.3",
+    "Pillow>=10.0",
 ]
 
 [project.optional-dependencies]

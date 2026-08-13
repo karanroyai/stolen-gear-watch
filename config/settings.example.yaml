@@ -47,7 +47,8 @@ reverse_image:
 stolen_registries:
   enabled:
     - lenstag
-    - stolen_camera_finder   # always manual-check, see stolen_registries/manual.py
+    - stolen_camera_finder              # automated serial-number search
+    - stolen_camera_finder_dust_pattern  # always manual-check (photo upload), see stolen_registries/manual.py
 
 alerting:
   telegram:

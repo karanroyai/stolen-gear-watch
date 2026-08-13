@@ -13,6 +13,7 @@ from stolen_gear_watch.core.config import load_env, load_settings, load_watched_
 from stolen_gear_watch.core.db import Database
 from stolen_gear_watch.core.logging_setup import configure_logging
 from stolen_gear_watch.core.models import WatchedItem
+from stolen_gear_watch.matching.exif import extract_serial
 
 app = typer.Typer(help="Watch marketplaces and stolen-gear registries for items reported stolen.")
 
@@ -72,6 +73,25 @@ def check_serial(
             "checked automatically - see the log output above for manual-check links.",
             fg=typer.colors.YELLOW,
         )
+
+
+@app.command("check-exif")
+def check_exif(
+    photo_paths: list[Path] = typer.Argument(..., help="One or more photo files to inspect"),
+) -> None:
+    """Extract a serial number from photo EXIF metadata, e.g. to check
+    what your camera actually writes before putting a serial in
+    watched_items.yaml. Uses exiftool if it's installed (much better
+    vendor MakerNote coverage), otherwise falls back to Pillow."""
+    for path in photo_paths:
+        if not path.exists():
+            typer.secho(f"[skip] {path} does not exist", fg=typer.colors.YELLOW)
+            continue
+        serial = extract_serial(path)
+        if serial:
+            typer.secho(f"{path}: {serial}", fg=typer.colors.GREEN)
+        else:
+            typer.secho(f"{path}: no serial found", fg=typer.colors.YELLOW)
 
 
 @app.command()

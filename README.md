@@ -23,14 +23,18 @@ module docstrings for the full reasoning, summarized here:
 
 1. **Serial number / EXIF matching.** Reads a serial out of your own
    photos' metadata (via `exiftool` if installed, otherwise a Pillow
-   fallback with less coverage), and fuzzy-matches your watched item's
-   serial/make/model against scraped listing text. Checking *external*
-   stolen-gear databases is split in two: [Lenstag](https://lenstag.com)
-   has a real public registry that's automated on a best-effort basis
-   (see `stolen_registries/lenstag.py` for the caveats); **Stolen Camera
-   Finder is not automated** - it works by uploading a photo for
-   sensor-dust-pattern matching, not by querying a database, so this tool
-   just gives you a direct link and reminds you to check it by hand.
+   fallback with less coverage; `stolen-gear-watch check-exif <photo>` runs
+   this from the CLI), and fuzzy-matches your watched item's serial/make/model
+   against scraped listing text. Checking *external* stolen-gear databases:
+   [Lenstag](https://lenstag.com) has a real public registry that's
+   automated on a best-effort basis (see `stolen_registries/lenstag.py` for
+   the caveats). **Stolen Camera Finder** turns out to have two separate
+   search modes - its serial-number search is automated the same way
+   (`stolen_registries/stolen_camera_finder.py`, verified against a real
+   server-rendered fallback endpoint their site ships); its reverse-image
+   *sensor-dust-pattern* search genuinely isn't automatable (needs a photo
+   upload against a service with no API), so that one still just gives you
+   a direct link and reminds you to check it by hand.
 
 2. **Marketplace scraping**, config-driven, one adapter class per site.
    Ships with Willhaben (AT), Kleinanzeigen (DE), Limundo (RS), and
