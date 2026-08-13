@@ -15,6 +15,7 @@ from stolen_gear_watch.alerting import get_notifiers
 from stolen_gear_watch.core.config import Settings
 from stolen_gear_watch.core.db import Database
 from stolen_gear_watch.core.models import Listing, Match, MatchType, RegistryHit, WatchedItem
+from stolen_gear_watch.matching.accessory import is_likely_non_item_listing
 from stolen_gear_watch.matching.color import mentions_conflicting_color
 from stolen_gear_watch.matching.ocr import get_ocr
 from stolen_gear_watch.matching.serial import serial_match_confidence
@@ -94,6 +95,11 @@ def _evaluate_listing(
     ):
         return
     if item.color and mentions_conflicting_color(haystack, item.color):
+        return
+    if (reason := is_likely_non_item_listing(listing.title, item)) is not None:
+        logger.info(
+            "Skipping listing %r for item %r - %s", listing.title[:80], item.id, reason
+        )
         return
 
     if item.serial:

@@ -167,6 +167,15 @@ logging and don't want a crontab.
   available from every adapter - currently Willhaben and Kleinanzeigen
   extract them, KupujemProdajem's search results don't expose one at all
   without fetching each listing's individual page. Gitignored.
+
+  A third filter needs no config: `matching/accessory.py` skips listings
+  that fuzzy-match on make/model but clearly aren't the item itself -
+  accessories/parts ("Case für Fujifilm X100VI" - accessory keyword
+  mentioned *before* the item's own make/model), books/manuals, rental
+  offers, and want-ads/trade-requests. Same conservative philosophy:
+  "Fujifilm X100VI + UV Filter" (item mentioned first, accessory as a
+  bundled extra) is kept, only "[accessory] für/for [item]" word order
+  gets filtered.
 - **`.env`** - all secrets (Telegram bot token/chat id, reverse-image API
   keys). Gitignored. Copy from `.env.example`.
 
