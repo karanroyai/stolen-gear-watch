@@ -3,6 +3,7 @@ site: write `your_site.py` implementing `Adapter` (see base.py), decorate
 the class with `@register_adapter`, and add an import line below."""
 
 from stolen_gear_watch.scrapers import (  # noqa: F401
+    ebay,
     kleinanzeigen,
     kupujemprodajem,
     limundo,

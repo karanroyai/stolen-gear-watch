@@ -103,7 +103,9 @@ class PoliteHttpClient:
         contact = f"; contact: {self.contact_email}" if self.contact_email else ""
         return f"stolen-gear-watch/{__version__} (+{PROJECT_URL}{contact})"
 
-    def _get(self, url: str, params: dict | None = None) -> requests.Response:
+    def _get(
+        self, url: str, params: dict | None = None, headers: dict | None = None
+    ) -> requests.Response:
         # Build the exact URL requests will fetch (including the query
         # string from `params`) before checking robots.txt - a lot of
         # real-world disallow rules target query parameters specifically,
@@ -115,6 +117,26 @@ class PoliteHttpClient:
                 f"{full_url} is disallowed by {self.base_url}/robots.txt for this client"
             )
         self._rate_limiter.wait()
-        resp = requests.get(full_url, headers={"User-Agent": self._user_agent()}, timeout=20)
+        resp = requests.get(
+            full_url, headers={"User-Agent": self._user_agent(), **(headers or {})}, timeout=20
+        )
+        resp.raise_for_status()
+        return resp
+
+    def _post(
+        self, url: str, data: dict | None = None, headers: dict | None = None, auth=None
+    ) -> requests.Response:
+        """For the rare non-GET call an official API needs (e.g. an OAuth
+        token exchange) - still rate-limited, but deliberately skips the
+        robots.txt check, which is meaningless for an authenticated API
+        endpoint that isn't a public page anyone could crawl."""
+        self._rate_limiter.wait()
+        resp = requests.post(
+            url,
+            data=data,
+            headers={"User-Agent": self._user_agent(), **(headers or {})},
+            auth=auth,
+            timeout=20,
+        )
         resp.raise_for_status()
         return resp

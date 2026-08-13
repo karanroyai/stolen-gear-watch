@@ -38,6 +38,10 @@ scrapers:
     enabled: true
     rate_limit_seconds: 5
     max_pages: 3
+  ebay:
+    enabled: false   # unverified schema, needs EBAY_CLIENT_ID/SECRET - see scrapers/ebay.py docstring
+    rate_limit_seconds: 2   # official API, not a scraped page - a lighter delay is fine
+    max_pages: 3
 
 reverse_image:
   # manual (default, no API key needed) | google_vision | tineye
