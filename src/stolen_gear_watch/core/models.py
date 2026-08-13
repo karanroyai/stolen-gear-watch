@@ -102,7 +102,8 @@ class Match(BaseModel):
 
 class RegistryHit(BaseModel):
     """Result of checking a watched item against an external stolen-gear
-    registry (e.g. Lenstag), as opposed to a marketplace listing."""
+    registry (e.g. Lenstag) or a reverse-image web search on a reference
+    photo, as opposed to a marketplace listing."""
 
     id: int | None = None
     watched_item_id: str
@@ -110,3 +111,4 @@ class RegistryHit(BaseModel):
     url: str
     detail: str = ""
     checked_at: datetime | None = None
+    alerted_at: datetime | None = None

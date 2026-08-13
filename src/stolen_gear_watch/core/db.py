@@ -34,7 +34,25 @@ class Database:
 
     def _migrate(self) -> None:
         self._conn.executescript(SCHEMA_PATH.read_text())
+        self._add_column_if_missing("registry_hits", "alerted_at", "TEXT")
+        self._conn.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_matches_unalerted
+                ON matches (alerted_at) WHERE alerted_at IS NULL;
+            CREATE INDEX IF NOT EXISTS idx_registry_hits_unalerted
+                ON registry_hits (alerted_at) WHERE alerted_at IS NULL;
+            """
+        )
         self._conn.commit()
+
+    def _add_column_if_missing(self, table: str, column: str, sql_type: str) -> None:
+        # CREATE TABLE IF NOT EXISTS in schema.sql doesn't touch columns on
+        # a table that already exists from an earlier version of this
+        # project - handle those additively so upgrading doesn't require
+        # wiping an existing database.
+        existing = {row["name"] for row in self._conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}")
 
     def close(self) -> None:
         self._conn.close()
@@ -144,6 +162,9 @@ class Database:
     # -- registry hits ----------------------------------------------------
 
     def add_registry_hit(self, hit: RegistryHit) -> RegistryHit | None:
+        """Insert a registry hit if it's new for this (watched_item,
+        registry, url) triple. Returns None if it was a duplicate, same
+        dedup contract as add_match - callers should not alert on None."""
         now = _now()
         try:
             cur = self._conn.execute(
@@ -157,6 +178,16 @@ class Database:
             return None
         self._conn.commit()
         return hit.model_copy(update={"id": cur.lastrowid, "checked_at": now})
+
+    def unalerted_registry_hits(self) -> list[RegistryHit]:
+        cur = self._conn.execute("SELECT * FROM registry_hits WHERE alerted_at IS NULL")
+        return [RegistryHit(**dict(row)) for row in cur.fetchall()]
+
+    def mark_registry_hit_alerted(self, hit_id: int) -> None:
+        self._conn.execute(
+            "UPDATE registry_hits SET alerted_at = ? WHERE id = ?", (_now(), hit_id)
+        )
+        self._conn.commit()
 
     # -- run log ------------------------------------------------------------
 

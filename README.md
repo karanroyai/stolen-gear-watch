@@ -54,8 +54,21 @@ module docstrings for the full reasoning, summarized here:
    of scope (against ToS, fragile, real risk). Instead this wraps official
    APIs - Google Cloud Vision's Web Detection and TinEye's API - both
    opt-in and requiring your own API key. With no key configured, the
-   default `manual` backend just logs a direct TinEye/Lens link per photo
-   so you can check by hand.
+   default `manual` backend just logs a direct check-it-yourself link.
+   Two things get checked, both controlled by the same `reverse_image.backend`
+   setting: **listing photos** scraped from marketplaces (only when a
+   listing didn't already match confidently on text - no point spending an
+   API call confirming what text matching already found), and **your own
+   reference photos** (`watched_items.yaml`'s `reference_photos`) searched
+   against the wider web every run, independent of any marketplace scrape -
+   this is what actually finds a specific photo of your item turning up
+   somewhere, not just "a listing that mentions the right model." Hits from
+   either path are deduped and alerted the same way as stolen-registry hits.
+
+   **HEIC note**: iPhone photos are usually `.heic`. Neither Google Vision
+   nor TinEye's API is confirmed to accept HEIC directly - if you hit
+   upload errors once you configure a real backend, convert reference
+   photos to JPEG first.
 
 ## Quick start
 

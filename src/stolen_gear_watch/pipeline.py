@@ -8,16 +8,19 @@ job (see README "Running on a schedule").
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from stolen_gear_watch import scrapers, stolen_registries
 from stolen_gear_watch.alerting import get_notifiers
 from stolen_gear_watch.core.config import Settings
 from stolen_gear_watch.core.db import Database
-from stolen_gear_watch.core.models import Listing, Match, MatchType, WatchedItem
+from stolen_gear_watch.core.models import Listing, Match, MatchType, RegistryHit, WatchedItem
 from stolen_gear_watch.matching.serial import serial_match_confidence
 from stolen_gear_watch.matching.text import text_match_confidence
 from stolen_gear_watch.net import RobotsDisallowedError
 from stolen_gear_watch.reverse_image import get_backend
+
+REFERENCE_PHOTO_SEARCH_REGISTRY_KEY = "reverse_image_web_search"
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +37,10 @@ def run(settings: Settings, watched_items: list[WatchedItem], db: Database) -> N
     items_by_id = {item.id: item for item in active_items}
 
     _run_scrapers(settings, active_items, db, image_backend)
-    _run_registry_checks(settings, active_items, db, notifiers)
+    _run_registry_checks(settings, active_items, db)
+    _run_reference_photo_search(settings, active_items, db, image_backend)
     _send_pending_alerts(db, notifiers, items_by_id)
+    _send_pending_registry_alerts(db, notifiers, items_by_id)
 
 
 def _run_scrapers(settings, active_items, db, image_backend) -> None:
@@ -123,7 +128,7 @@ def _evaluate_listing(
                     )
 
 
-def _run_registry_checks(settings: Settings, active_items, db: Database, notifiers) -> None:
+def _run_registry_checks(settings: Settings, active_items, db: Database) -> None:
     for registry_key in settings.stolen_registries.enabled:
         checker = stolen_registries.REGISTRIES.get(registry_key)
         if checker is None:
@@ -132,13 +137,41 @@ def _run_registry_checks(settings: Settings, active_items, db: Database, notifie
         for item in active_items:
             try:
                 for hit in checker.check(item):
-                    saved = db.add_registry_hit(hit)
-                    if saved is None:
-                        continue  # already recorded, don't re-alert
-                    for notifier in notifiers:
-                        notifier.send_registry_hit(saved, item)
+                    db.add_registry_hit(hit)
             except Exception:
                 logger.exception("Registry checker %s failed for item %s", registry_key, item.id)
+
+
+def _run_reference_photo_search(
+    settings: Settings, active_items, db: Database, image_backend
+) -> None:
+    """Search the web (via whichever reverse_image.backend is configured)
+    using each watched item's own reference photos as the query image -
+    catches your camera's specific photos turning up somewhere online,
+    independent of anything scraped from a marketplace. With the default
+    `manual` backend this just logs a check-it-yourself link per photo,
+    same as any other unconfigured backend in this project."""
+    for item in active_items:
+        for photo_path in item.reference_photos:
+            try:
+                results = image_backend.search(photo_path)
+            except Exception:
+                logger.exception(
+                    "Reference photo search failed for %s (item %s)", photo_path, item.id
+                )
+                continue
+            for result in results:
+                if result.confidence < settings.reverse_image.min_confidence:
+                    continue
+                db.add_registry_hit(
+                    RegistryHit(
+                        watched_item_id=item.id,
+                        registry=REFERENCE_PHOTO_SEARCH_REGISTRY_KEY,
+                        url=result.matched_url,
+                        detail=f"{result.description} (confidence {result.confidence:.2f}) "
+                        f"- from reference photo {Path(photo_path).name}",
+                    )
+                )
 
 
 def _send_pending_alerts(
@@ -162,3 +195,25 @@ def _send_pending_alerts(
                 logger.exception("Failed to send alert for match %s", match.id)
         if sent:
             db.mark_alerted(match.id)
+
+
+def _send_pending_registry_alerts(
+    db: Database, notifiers, items_by_id: dict[str, WatchedItem]
+) -> None:
+    # Same deferred-delivery contract as _send_pending_alerts: a hit only
+    # counts as alerted once a notifier actually sends it. registry_hits
+    # covers both stolen_registries checkers (Lenstag, Stolen Camera
+    # Finder) and reference-photo web-search results.
+    for hit in db.unalerted_registry_hits():
+        item = items_by_id.get(hit.watched_item_id)
+        if item is None:
+            continue
+        sent = False
+        for notifier in notifiers:
+            try:
+                notifier.send_registry_hit(hit, item)
+                sent = True
+            except Exception:
+                logger.exception("Failed to send alert for registry hit %s", hit.id)
+        if sent:
+            db.mark_registry_hit_alerted(hit.id)

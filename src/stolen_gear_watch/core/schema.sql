@@ -1,6 +1,11 @@
 -- SQLite schema for stolen-gear-watch.
 -- Applied once at startup by core/db.py; schema_version tracks what's applied
 -- so future migrations can be added without wiping existing data.
+--
+-- Only CREATE TABLE goes here. Indexes are created separately in db.py,
+-- after any ALTER TABLE column migrations run - an index on a column that
+-- doesn't exist yet on an older database would fail before the migration
+-- had a chance to add it.
 
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER NOT NULL
@@ -42,6 +47,7 @@ CREATE TABLE IF NOT EXISTS registry_hits (
     url TEXT NOT NULL,
     detail TEXT NOT NULL DEFAULT '',
     checked_at TEXT NOT NULL,
+    alerted_at TEXT,
     UNIQUE (watched_item_id, registry, url)
 );
 
@@ -54,7 +60,3 @@ CREATE TABLE IF NOT EXISTS run_log (
     new_listings INTEGER NOT NULL DEFAULT 0,
     error TEXT
 );
-
-CREATE INDEX IF NOT EXISTS idx_matches_unalerted
-    ON matches (alerted_at)
-    WHERE alerted_at IS NULL;
