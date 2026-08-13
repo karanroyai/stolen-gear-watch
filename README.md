@@ -70,6 +70,21 @@ module docstrings for the full reasoning, summarized here:
    upload errors once you configure a real backend, convert reference
    photos to JPEG first.
 
+4. **OCR serial matching on listing photos.** Generic visual similarity on
+   a mass-produced camera body isn't actually useful for finding *your*
+   unit specifically - every X100VI looks like every other X100VI, so
+   it'd just flag every listing of that model, no better than text
+   matching already does for free. What's genuinely more targeted: if a
+   seller photographs the bottom plate or battery door, the serial number
+   is often visible in the photo even when it's never mentioned in the ad
+   text. `matching/ocr.py` reads text out of listing photos via Google
+   Cloud Vision's text detection and checks it against the watched item's
+   serial - same API/credentials as reverse image search's Vision backend,
+   just a different feature, so nothing new to set up if you've already
+   configured `reverse_image.backend: google_vision`. No equivalent exists
+   for the `manual`/`tineye` backends, so this check is simply skipped
+   with either of those rather than producing noise.
+
 ## Quick start
 
 ```bash

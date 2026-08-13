@@ -86,6 +86,7 @@ class MatchType(str, Enum):
     SERIAL = "serial"
     TEXT = "text"
     IMAGE = "image"
+    OCR = "ocr"
     REGISTRY = "registry"
 
 

@@ -15,6 +15,7 @@ from stolen_gear_watch.alerting import get_notifiers
 from stolen_gear_watch.core.config import Settings
 from stolen_gear_watch.core.db import Database
 from stolen_gear_watch.core.models import Listing, Match, MatchType, RegistryHit, WatchedItem
+from stolen_gear_watch.matching.ocr import get_ocr
 from stolen_gear_watch.matching.serial import serial_match_confidence
 from stolen_gear_watch.matching.text import text_match_confidence
 from stolen_gear_watch.net import RobotsDisallowedError
@@ -33,17 +34,18 @@ def run(settings: Settings, watched_items: list[WatchedItem], db: Database) -> N
 
     notifiers = get_notifiers(settings)
     image_backend = get_backend(settings.reverse_image)
+    ocr = get_ocr(settings.reverse_image)
 
     items_by_id = {item.id: item for item in active_items}
 
-    _run_scrapers(settings, active_items, db, image_backend)
+    _run_scrapers(settings, active_items, db, image_backend, ocr)
     _run_registry_checks(settings, active_items, db)
     _run_reference_photo_search(settings, active_items, db, image_backend)
     _send_pending_alerts(db, notifiers, items_by_id)
     _send_pending_registry_alerts(db, notifiers, items_by_id)
 
 
-def _run_scrapers(settings, active_items, db, image_backend) -> None:
+def _run_scrapers(settings, active_items, db, image_backend, ocr) -> None:
     for site_key, scraper_settings in settings.scrapers.items():
         if not scraper_settings.enabled:
             continue
@@ -64,7 +66,7 @@ def _run_scrapers(settings, active_items, db, image_backend) -> None:
                     listing, is_new = db.upsert_listing(raw)
                     if is_new:
                         new_listings += 1
-                    _evaluate_listing(listing, item, settings, db, image_backend)
+                    _evaluate_listing(listing, item, settings, db, image_backend, ocr)
             except RobotsDisallowedError as exc:
                 logger.warning("Stopped scraping %s: %s", site_key, exc)
                 error = str(exc)
@@ -76,7 +78,7 @@ def _run_scrapers(settings, active_items, db, image_backend) -> None:
 
 
 def _evaluate_listing(
-    listing: Listing, item: WatchedItem, settings: Settings, db: Database, image_backend
+    listing: Listing, item: WatchedItem, settings: Settings, db: Database, image_backend, ocr
 ) -> None:
     haystack = f"{listing.title}\n{listing.description}"
 
@@ -126,6 +128,37 @@ def _evaluate_listing(
                             detail=f"{result.description}: {result.matched_url}",
                         )
                     )
+
+    # OCR is the other opt-in, per-photo check, gated the same way as
+    # reverse image search (only worth it when text alone didn't already
+    # confirm the match) - but only runs at all if `ocr` is configured
+    # (see matching/ocr.py::get_ocr), and only if there's a serial to look
+    # for in the first place.
+    if (
+        ocr is not None
+        and item.serial
+        and text_confidence < settings.match_confidence_threshold
+        and listing.photo_urls
+    ):
+        for photo_url in listing.photo_urls:
+            try:
+                photo_text = ocr.extract_text(photo_url)
+            except Exception:
+                logger.exception("OCR failed for %s", photo_url)
+                continue
+            if not photo_text:
+                continue
+            ocr_confidence = serial_match_confidence(photo_text, item.serial)
+            if ocr_confidence > 0:
+                db.add_match(
+                    Match(
+                        listing_id=listing.id,
+                        watched_item_id=item.id,
+                        match_type=MatchType.OCR,
+                        confidence=ocr_confidence,
+                        detail=f"Serial {item.serial} read via OCR on listing photo: {photo_url}",
+                    )
+                )
 
 
 def _run_registry_checks(settings: Settings, active_items, db: Database) -> None:
