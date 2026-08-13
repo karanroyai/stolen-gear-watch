@@ -20,6 +20,8 @@ watched_items:
     price_min: 2000
     price_max: 4500
     currency: EUR
+    color: black                    # optional - a listing whose text names a different color is skipped entirely
+    stolen_at: "2026-06-01"          # optional - a listing posted before this date is skipped entirely
     active: true
 
   - id: my-lens

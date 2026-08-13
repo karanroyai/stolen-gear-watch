@@ -15,6 +15,7 @@ from stolen_gear_watch.alerting import get_notifiers
 from stolen_gear_watch.core.config import Settings
 from stolen_gear_watch.core.db import Database
 from stolen_gear_watch.core.models import Listing, Match, MatchType, RegistryHit, WatchedItem
+from stolen_gear_watch.matching.color import mentions_conflicting_color
 from stolen_gear_watch.matching.ocr import get_ocr
 from stolen_gear_watch.matching.serial import serial_match_confidence
 from stolen_gear_watch.matching.text import text_match_confidence
@@ -81,6 +82,19 @@ def _evaluate_listing(
     listing: Listing, item: WatchedItem, settings: Settings, db: Database, image_backend, ocr
 ) -> None:
     haystack = f"{listing.title}\n{listing.description}"
+
+    # Confident negative signals, checked before any matching logic runs:
+    # a listing posted before the item was stolen, or one that explicitly
+    # describes a conflicting color, can't be the stolen item - skip it
+    # entirely rather than let text/serial/image matching still fire.
+    if (
+        item.stolen_at is not None
+        and listing.posted_at is not None
+        and listing.posted_at.date() < item.stolen_at.date()
+    ):
+        return
+    if item.color and mentions_conflicting_color(haystack, item.color):
+        return
 
     if item.serial:
         confidence = serial_match_confidence(haystack, item.serial)

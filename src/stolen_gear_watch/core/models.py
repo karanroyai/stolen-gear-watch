@@ -44,6 +44,18 @@ class WatchedItem(BaseModel):
     price_min: float | None = None
     price_max: float | None = None
     currency: str | None = None
+    color: str | None = Field(
+        default=None,
+        description="e.g. silver, black. If set, a listing whose text explicitly "
+        "names a different color is skipped entirely - see matching/color.py.",
+    )
+    stolen_at: datetime | None = Field(
+        default=None,
+        description="Date the item was stolen (e.g. 2026-06-01). If set, a listing "
+        "with a known post date earlier than this is skipped entirely - it can't be "
+        "your item if it was posted before the theft. Listings with an unknown post "
+        "date (most adapters can't always extract one) are never filtered by this.",
+    )
     active: bool = True
 
     @field_validator("serial")

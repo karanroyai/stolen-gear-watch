@@ -1,6 +1,13 @@
+from datetime import UTC, datetime
+
+from stolen_gear_watch.core.config import Settings
 from stolen_gear_watch.core.db import Database
 from stolen_gear_watch.core.models import Match, MatchType, RawListing, RegistryHit, WatchedItem
-from stolen_gear_watch.pipeline import _send_pending_alerts, _send_pending_registry_alerts
+from stolen_gear_watch.pipeline import (
+    _evaluate_listing,
+    _send_pending_alerts,
+    _send_pending_registry_alerts,
+)
 
 
 def make_item(item_id="my-item"):
@@ -102,3 +109,70 @@ def test_successful_notifier_marks_registry_hit_alerted(tmp_path):
 
         assert len(db.unalerted_registry_hits()) == 0
         assert len(sent) == 1
+
+
+def test_listing_posted_before_theft_date_is_skipped(tmp_path):
+    with Database(tmp_path / "test.db") as db:
+        item = WatchedItem(
+            id="my-item",
+            category="camera_body",
+            make="Canon",
+            model="EOS R5",
+            stolen_at=datetime(2026, 6, 1, tzinfo=UTC),
+        )
+        listing, _ = db.upsert_listing(
+            RawListing(
+                source_site="testsite",
+                source_id="1",
+                url="https://example.com/1",
+                title="Canon EOS R5",
+                posted_at=datetime(2026, 5, 1, tzinfo=UTC),  # before the theft date
+            )
+        )
+
+        _evaluate_listing(listing, item, Settings(), db, image_backend=None, ocr=None)
+
+        assert db.unalerted_matches() == []
+
+
+def test_listing_posted_after_theft_date_is_evaluated_normally(tmp_path):
+    with Database(tmp_path / "test.db") as db:
+        item = WatchedItem(
+            id="my-item",
+            category="camera_body",
+            make="Canon",
+            model="EOS R5",
+            stolen_at=datetime(2026, 6, 1, tzinfo=UTC),
+        )
+        listing, _ = db.upsert_listing(
+            RawListing(
+                source_site="testsite",
+                source_id="1",
+                url="https://example.com/1",
+                title="Canon EOS R5",
+                posted_at=datetime(2026, 6, 15, tzinfo=UTC),  # after the theft date
+            )
+        )
+
+        _evaluate_listing(listing, item, Settings(), db, image_backend=None, ocr=None)
+
+        assert len(db.unalerted_matches()) == 1
+
+
+def test_listing_with_conflicting_color_is_skipped(tmp_path):
+    with Database(tmp_path / "test.db") as db:
+        item = WatchedItem(
+            id="my-item", category="camera_body", make="Canon", model="EOS R5", color="silver"
+        )
+        listing, _ = db.upsert_listing(
+            RawListing(
+                source_site="testsite",
+                source_id="1",
+                url="https://example.com/1",
+                title="Canon EOS R5 Schwarz",
+            )
+        )
+
+        _evaluate_listing(listing, item, Settings(), db, image_backend=None, ocr=None)
+
+        assert db.unalerted_matches() == []

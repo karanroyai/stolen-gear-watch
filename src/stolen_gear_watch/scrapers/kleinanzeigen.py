@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 
 from bs4 import BeautifulSoup, Tag
 
@@ -30,6 +32,31 @@ from stolen_gear_watch.scrapers.base import Adapter
 from stolen_gear_watch.scrapers.registry import register_adapter
 
 logger = logging.getLogger(__name__)
+
+_ABSOLUTE_DATE_RE = re.compile(r"^(\d{2})\.(\d{2})\.(\d{4})$")
+
+
+def _parse_posted_at(text: str) -> datetime | None:
+    """Kleinanzeigen shows exactly three formats for a card's date/time:
+    "Heute, HH:MM" (today), "Gestern, HH:MM" (yesterday), or "DD.MM.YYYY"
+    for anything older - verified directly against a live search page.
+    Only the date component ever gets used downstream (see pipeline.py's
+    stolen_at filter), so the exact time-of-day and timezone here don't
+    need to be precise - UTC is just a concrete anchor to satisfy naive-
+    datetime linting, not a claim about the listing's actual local time."""
+    text = text.strip()
+    if text.startswith("Heute"):
+        return datetime.now(UTC)
+    if text.startswith("Gestern"):
+        return datetime.now(UTC) - timedelta(days=1)
+    match = _ABSOLUTE_DATE_RE.match(text)
+    if match:
+        day, month, year = (int(g) for g in match.groups())
+        try:
+            return datetime(year, month, day, tzinfo=UTC)
+        except ValueError:
+            return None
+    return None
 
 
 @register_adapter
@@ -88,6 +115,9 @@ class KleinanzeigenAdapter(Adapter):
         location_el = card.select_one(".aditem-main--top--left")
         location = location_el.get_text(strip=True) if location_el else None
 
+        date_el = card.select_one(".aditem-main--top--right")
+        posted_at = _parse_posted_at(date_el.get_text()) if date_el else None
+
         photo_urls = []
         if image_url:
             photo_urls.append(image_url)
@@ -105,6 +135,7 @@ class KleinanzeigenAdapter(Adapter):
             price=price,
             currency=currency,
             location=location,
+            posted_at=posted_at,
             photo_urls=photo_urls,
         )
 

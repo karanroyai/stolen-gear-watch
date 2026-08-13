@@ -155,7 +155,18 @@ logging and don't want a crontab.
   backend, which stolen registries to check, whether Telegram alerting is
   on. No personal data; safe to share/commit.
 - **`config/watched_items.yaml`** - the actual item(s): make, model,
-  serial, description, reference photos, price range. Gitignored.
+  serial, description, reference photos, price range, and two optional
+  filters applied before any matching logic runs on a listing - `color`
+  (skip a listing whose text explicitly names a *different* color; never
+  skips on color simply not being mentioned) and `stolen_at` (skip a
+  listing with a known post date earlier than this - it can't be your
+  item if it was posted before the theft). Both are conservative by
+  design: they only ever filter on a confident negative signal, never on
+  missing information, since a false negative (missing your actual
+  stolen item) is worse than a little extra noise. Post dates aren't
+  available from every adapter - currently Willhaben and Kleinanzeigen
+  extract them, KupujemProdajem's search results don't expose one at all
+  without fetching each listing's individual page. Gitignored.
 - **`.env`** - all secrets (Telegram bot token/chat id, reverse-image API
   keys). Gitignored. Copy from `.env.example`.
 
