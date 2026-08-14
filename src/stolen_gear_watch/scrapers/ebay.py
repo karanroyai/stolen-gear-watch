@@ -14,23 +14,12 @@ needs. This adapter uses that, not the scraped website, so `self._get()`
 talks to api.ebay.com (which has no robots.txt of its own - 404 -
 correctly treated as unrestricted) rather than www.ebay.com.
 
-STATUS: built against eBay's publicly documented Browse API schema, not
-yet verified against a live response - this was written without API
-credentials available to test with (see README/CONTRIBUTING for the
-project's usual "verify before claiming it works" standard, which
-couldn't be met here the normal way). In particular:
-- `_parse_item`'s date extraction is a best-effort guess at where a
-  listing start/creation date might appear in the ItemSummary search
-  response schema; eBay's documentation is not fully clear on whether
-  this is populated in search results vs. only in the single-item detail
-  endpoint. If it's missing, this adapter simply won't populate
-  `posted_at` (degrades gracefully - see pipeline.py's stolen_at filter,
-  which only ever filters on a *known* date).
-- Field names for price/image/location come from eBay's documented
-  ItemSummary object shape; a live response should be diff'd against
-  this once real credentials exist, and this docstring updated with a
-  confirmed status the way willhaben.py/kleinanzeigen.py were once
-  verified live.
+STATUS: verified live once real credentials became available - the
+OAuth client-credentials exchange, a real search (50 real Fujifilm
+X100VI listings on the German marketplace, correct titles/prices/
+locations/photos), and `_parse_item`'s date-field guess
+(`itemCreationDate`/`itemStartDate`) all confirmed working against
+actual API responses, not just documented schema.
 
 Requires EBAY_CLIENT_ID and EBAY_CLIENT_SECRET in .env (from a free
 developer.ebay.com account, "application access token" / client
@@ -102,7 +91,11 @@ class EbayAdapter(Adapter):
 
     def _auth_headers(self) -> dict:
         token = self._get_access_token()
-        marketplace_id = os.environ.get("EBAY_MARKETPLACE_ID", "EBAY_DE")
+        # os.environ.get(key, default) only falls back when the key is
+        # absent entirely - an empty EBAY_MARKETPLACE_ID= line in .env
+        # (present but blank, as dotenv sets it) would otherwise send an
+        # empty header value instead of actually defaulting.
+        marketplace_id = os.environ.get("EBAY_MARKETPLACE_ID") or "EBAY_DE"
         return {
             "Authorization": f"Bearer {token}",
             "X-EBAY-C-MARKETPLACE-ID": marketplace_id,
