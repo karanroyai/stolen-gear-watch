@@ -126,6 +126,26 @@ module docstrings for the full reasoning, summarized here:
      a cron job running every few hours, not fine for anything real-time.
      `pip install stolen-gear-watch[easyocr]` to enable.
 
+5. **General web search.** Everything above either targets a specific
+   marketplace or does image-based search - this is the "just Google it"
+   case: a plain keyword search (make + model) across the whole web,
+   catching resale listings on sites this project has no dedicated
+   adapter for. Deliberately does **not** scrape google.com/search
+   directly (against ToS, fragile, real risk - same reasoning as the
+   Google Lens decision above); uses the official **Custom Search JSON
+   API** instead, free for 100 queries/day. Controlled by
+   `web_search.backend` (`none` by default, `google_custom_search` to
+   enable - needs `GOOGLE_CUSTOM_SEARCH_API_KEY`/`GOOGLE_CUSTOM_SEARCH_ENGINE_ID`
+   in `.env`, the latter from a Programmable Search Engine configured to
+   search the entire web). A plain web search surfaces a lot a dedicated
+   adapter never has to deal with - official retailer pages, review
+   articles - so results get filtered two ways before becoming a match:
+   a `-site:` exclusion list for known retailers/manufacturers baked
+   into the query itself, plus the same accessory/color checks already
+   applied to marketplace listings. No post-date filtering here (`stolen_at`)
+   - Custom Search's response doesn't reliably include one, a known gap,
+   not silently worked around.
+
 ## Quick start
 
 ```bash
@@ -179,9 +199,9 @@ logging and don't want a crontab.
 
 ## Configuration reference
 
-- **`config/settings.yaml`** - adapters enabled, rate limits, reverse-image
-  backend, which stolen registries to check, whether Telegram alerting is
-  on. No personal data; safe to share/commit.
+- **`config/settings.yaml`** - adapters enabled, rate limits, reverse-image/
+  OCR/web-search backends, which stolen registries to check, whether
+  Telegram alerting is on. No personal data; safe to share/commit.
 - **`config/watched_items.yaml`** - the actual item(s): make, model,
   serial, description, reference photos, price range, and two optional
   filters applied before any matching logic runs on a listing - `color`
