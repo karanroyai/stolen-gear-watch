@@ -22,10 +22,30 @@ from stolen_gear_watch.matching.serial import serial_match_confidence
 from stolen_gear_watch.matching.text import text_match_confidence
 from stolen_gear_watch.net import RobotsDisallowedError
 from stolen_gear_watch.reverse_image import get_backend
+from stolen_gear_watch.reverse_image.manual import ManualImageSearchBackend
+from stolen_gear_watch.web_search import get_web_search
+from stolen_gear_watch.web_search.google_custom_search import is_excluded_domain
 
 REFERENCE_PHOTO_SEARCH_REGISTRY_KEY = "reverse_image_web_search"
+WEB_SEARCH_REGISTRY_KEY = "web_search"
 
 logger = logging.getLogger(__name__)
+
+
+def _build_optional(factory, settings, label: str, fallback=None):
+    """Belt-and-suspenders around every get_X(settings) backend factory
+    called here: each one is already fixed to defer its own credential
+    loading (see e.g. scrapers/ebay.py, web_search/google_custom_search.py),
+    but this call site sits outside any per-item try/except - one bad
+    backend construction would otherwise take down the entire scheduled
+    run, not just that feature. Real incident, not a hypothetical: an
+    earlier version of the web-search backend read a missing env var in
+    __init__ and did exactly this."""
+    try:
+        return factory(settings)
+    except Exception:
+        logger.exception("Failed to construct %s - disabled for this run", label)
+        return fallback
 
 
 def run(settings: Settings, watched_items: list[WatchedItem], db: Database) -> None:
@@ -35,14 +55,21 @@ def run(settings: Settings, watched_items: list[WatchedItem], db: Database) -> N
         return
 
     notifiers = get_notifiers(settings)
-    image_backend = get_backend(settings.reverse_image)
-    ocr = get_ocr(settings.ocr)
+    image_backend = _build_optional(
+        get_backend,
+        settings.reverse_image,
+        "reverse-image backend",
+        fallback=ManualImageSearchBackend(),
+    )
+    ocr = _build_optional(get_ocr, settings.ocr, "OCR backend")
+    web_search = _build_optional(get_web_search, settings.web_search, "web search backend")
 
     items_by_id = {item.id: item for item in active_items}
 
     _run_scrapers(settings, active_items, db, image_backend, ocr)
     _run_registry_checks(settings, active_items, db)
     _run_reference_photo_search(settings, active_items, db, image_backend)
+    _run_web_search(settings, active_items, db, web_search)
     _send_pending_alerts(db, notifiers, items_by_id)
     _send_pending_registry_alerts(db, notifiers, items_by_id)
 
@@ -132,22 +159,28 @@ def _evaluate_listing(
     # there's something to compare against.
     if text_confidence < settings.match_confidence_threshold and listing.photo_urls:
         for photo_url in listing.photo_urls:
+            # search() is a generator in every real backend (yield, not
+            # return) - its body, including any request/auth error, only
+            # runs once iterated. The whole for-loop has to be inside the
+            # try, not just the call that creates the generator, or
+            # exceptions raised during iteration go uncaught. (Real
+            # incident: this exact mistake in _run_web_search took down
+            # an entire scheduled run - see pipeline.py's git history.)
             try:
-                results = image_backend.search(photo_url)
+                for result in image_backend.search(photo_url):
+                    if result.confidence >= settings.reverse_image.min_confidence:
+                        db.add_match(
+                            Match(
+                                listing_id=listing.id,
+                                watched_item_id=item.id,
+                                match_type=MatchType.IMAGE,
+                                confidence=result.confidence,
+                                detail=f"{result.description}: {result.matched_url}",
+                            )
+                        )
             except Exception:
                 logger.exception("Reverse image search failed for %s", photo_url)
                 continue
-            for result in results:
-                if result.confidence >= settings.reverse_image.min_confidence:
-                    db.add_match(
-                        Match(
-                            listing_id=listing.id,
-                            watched_item_id=item.id,
-                            match_type=MatchType.IMAGE,
-                            confidence=result.confidence,
-                            detail=f"{result.description}: {result.matched_url}",
-                        )
-                    )
 
     # OCR is the other opt-in, per-photo check, gated the same way as
     # reverse image search (only worth it when text alone didn't already
@@ -206,25 +239,72 @@ def _run_reference_photo_search(
     same as any other unconfigured backend in this project."""
     for item in active_items:
         for photo_path in item.reference_photos:
+            # See the matching comment in _evaluate_listing: search() is a
+            # generator, so the whole for-loop must be inside the try, not
+            # just the call that creates it.
             try:
-                results = image_backend.search(photo_path)
+                for result in image_backend.search(photo_path):
+                    if result.confidence < settings.reverse_image.min_confidence:
+                        continue
+                    db.add_registry_hit(
+                        RegistryHit(
+                            watched_item_id=item.id,
+                            registry=REFERENCE_PHOTO_SEARCH_REGISTRY_KEY,
+                            url=result.matched_url,
+                            detail=f"{result.description} (confidence {result.confidence:.2f}) "
+                            f"- from reference photo {Path(photo_path).name}",
+                        )
+                    )
             except Exception:
                 logger.exception(
                     "Reference photo search failed for %s (item %s)", photo_path, item.id
                 )
                 continue
-            for result in results:
-                if result.confidence < settings.reverse_image.min_confidence:
+
+
+def _run_web_search(settings: Settings, active_items, db: Database, web_search) -> None:
+    """General keyword web search (Google Custom Search) for each watched
+    item, independent of any specific marketplace - catches resale
+    listings anywhere on the web, not just the sites this project has a
+    dedicated adapter for. Reuses the same accessory/color filters
+    already applied to marketplace listings, plus a domain check, since
+    a plain web search surfaces retailer/manufacturer noise a dedicated
+    adapter never sees in the first place."""
+    if web_search is None:
+        return
+    for item in active_items:
+        query = " ".join(filter(None, [item.make, item.model]))
+        if not query:
+            continue
+        # search() is a generator - the whole for-loop must be inside the
+        # try, not just the call that creates it, or exceptions raised
+        # during iteration (e.g. a missing API credential, which only
+        # actually gets checked once the generator body runs) go
+        # uncaught. This exact mistake here previously took down an
+        # entire scheduled run - see this function's git history.
+        try:
+            for result in web_search.search(
+                query, num_results=settings.web_search.results_per_query
+            ):
+                if is_excluded_domain(result.display_link or result.url):
                     continue
+                haystack = f"{result.title}\n{result.snippet}"
+                if item.color and mentions_conflicting_color(haystack, item.color):
+                    continue
+                if is_likely_non_item_listing(result.title, item) is not None:
+                    continue
+
                 db.add_registry_hit(
                     RegistryHit(
                         watched_item_id=item.id,
-                        registry=REFERENCE_PHOTO_SEARCH_REGISTRY_KEY,
-                        url=result.matched_url,
-                        detail=f"{result.description} (confidence {result.confidence:.2f}) "
-                        f"- from reference photo {Path(photo_path).name}",
+                        registry=WEB_SEARCH_REGISTRY_KEY,
+                        url=result.url,
+                        detail=f"{result.title} - {result.snippet[:150]}",
                     )
                 )
+        except Exception:
+            logger.exception("Web search failed for item %s", item.id)
+            continue
 
 
 def _send_pending_alerts(

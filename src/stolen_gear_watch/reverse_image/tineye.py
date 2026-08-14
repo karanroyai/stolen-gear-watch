@@ -27,26 +27,37 @@ class TinEyeBackend(ImageSearchBackend):
     backend_key = "tineye"
 
     def __init__(self) -> None:
-        try:
-            from pytineye import TinEyeAPIRequest
-        except ImportError as exc:
-            raise RuntimeError(
-                "pytineye is not installed. Run `pip install stolen-gear-watch[tineye]` "
-                "and set TINEYE_PUBLIC_KEY/TINEYE_PRIVATE_KEY, or switch "
-                "reverse_image.backend back to 'manual' in settings.yaml."
-            ) from exc
-        self._api = TinEyeAPIRequest(
-            api_url="https://api.tineye.com/rest/",
-            public_key=require_env("TINEYE_PUBLIC_KEY"),
-            private_key=require_env("TINEYE_PRIVATE_KEY"),
-        )
+        # Deliberately does no import or credential check here - get_backend()
+        # constructs this at the top of pipeline.run(), outside any per-item
+        # try/except, so raising in __init__ over a missing package or .env
+        # value would crash the entire scheduled run instead of just this
+        # feature. See scrapers/ebay.py for the same lesson.
+        self._api = None
+
+    def _client(self):
+        if self._api is None:
+            try:
+                from pytineye import TinEyeAPIRequest
+            except ImportError as exc:
+                raise RuntimeError(
+                    "pytineye is not installed. Run `pip install stolen-gear-watch[tineye]` "
+                    "and set TINEYE_PUBLIC_KEY/TINEYE_PRIVATE_KEY, or switch "
+                    "reverse_image.backend back to 'manual' in settings.yaml."
+                ) from exc
+            self._api = TinEyeAPIRequest(
+                api_url="https://api.tineye.com/rest/",
+                public_key=require_env("TINEYE_PUBLIC_KEY"),
+                private_key=require_env("TINEYE_PRIVATE_KEY"),
+            )
+        return self._api
 
     def search(self, image_path_or_url: str) -> Iterator[ImageSearchResult]:
+        api = self._client()
         if image_path_or_url.startswith(("http://", "https://")):
-            response = self._api.search_url(image_path_or_url)
+            response = api.search_url(image_path_or_url)
         else:
             with open(image_path_or_url, "rb") as f:
-                response = self._api.search_data(f.read())
+                response = api.search_data(f.read())
 
         for match in response.matches:
             yield ImageSearchResult(

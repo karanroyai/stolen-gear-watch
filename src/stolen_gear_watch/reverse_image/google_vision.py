@@ -32,19 +32,32 @@ class GoogleVisionBackend(ImageSearchBackend):
     backend_key = "google_vision"
 
     def __init__(self) -> None:
-        try:
-            from google.cloud import vision
-        except ImportError as exc:
-            raise RuntimeError(
-                "google-cloud-vision is not installed. Run "
-                "`pip install stolen-gear-watch[google-vision]` and set "
-                "GOOGLE_APPLICATION_CREDENTIALS, or switch reverse_image.backend "
-                "back to 'manual' in settings.yaml."
-            ) from exc
-        self._client = vision.ImageAnnotatorClient()
-        self._vision = vision
+        # Deliberately does no import or client construction here -
+        # get_backend() constructs this at the top of pipeline.run(),
+        # outside any per-item try/except, so a missing package or
+        # invalid/absent GOOGLE_APPLICATION_CREDENTIALS raising in
+        # __init__ would crash the entire scheduled run instead of just
+        # reverse-image search. See scrapers/ebay.py for the same lesson.
+        self._client = None
+        self._vision = None
+
+    def _get_client(self):
+        if self._client is None:
+            try:
+                from google.cloud import vision
+            except ImportError as exc:
+                raise RuntimeError(
+                    "google-cloud-vision is not installed. Run "
+                    "`pip install stolen-gear-watch[google-vision]` and set "
+                    "GOOGLE_APPLICATION_CREDENTIALS, or switch reverse_image.backend "
+                    "back to 'manual' in settings.yaml."
+                ) from exc
+            self._vision = vision
+            self._client = vision.ImageAnnotatorClient()
+        return self._client
 
     def search(self, image_path_or_url: str) -> Iterator[ImageSearchResult]:
+        self._client = self._get_client()
         if image_path_or_url.startswith(("http://", "https://")):
             image = self._vision.Image(source=self._vision.ImageSource(image_uri=image_path_or_url))
         else:

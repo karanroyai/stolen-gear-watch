@@ -49,21 +49,35 @@ logger = logging.getLogger(__name__)
 
 class GoogleVisionOcr:
     def __init__(self) -> None:
-        try:
-            from google.cloud import vision
-        except ImportError as exc:
-            raise RuntimeError(
-                "google-cloud-vision is not installed. Run "
-                "`pip install stolen-gear-watch[google-vision]` and set "
-                "GOOGLE_APPLICATION_CREDENTIALS to enable OCR serial matching."
-            ) from exc
-        self._client = vision.ImageAnnotatorClient()
-        self._vision = vision
+        # Deliberately does no import or client construction here -
+        # get_ocr() constructs this at the top of pipeline.run(), outside
+        # any per-item try/except, so a missing package or invalid/absent
+        # GOOGLE_APPLICATION_CREDENTIALS raising in __init__ would crash
+        # the entire scheduled run instead of just OCR. See scrapers/ebay.py
+        # for the same lesson (and web_search/google_custom_search.py,
+        # reverse_image/tineye.py, alerting/telegram.py for the same fix).
+        self._client = None
+        self._vision = None
+
+    def _get_client(self):
+        if self._client is None:
+            try:
+                from google.cloud import vision
+            except ImportError as exc:
+                raise RuntimeError(
+                    "google-cloud-vision is not installed. Run "
+                    "`pip install stolen-gear-watch[google-vision]` and set "
+                    "GOOGLE_APPLICATION_CREDENTIALS to enable OCR serial matching."
+                ) from exc
+            self._vision = vision
+            self._client = vision.ImageAnnotatorClient()
+        return self._client
 
     def extract_text(self, image_path_or_url: str) -> str:
         """Returns all text Vision can read in the image, or "" if none
         (or the request failed - callers should treat that as "found
         nothing," not crash the run over one bad photo)."""
+        self._client = self._get_client()
         if image_path_or_url.startswith(("http://", "https://")):
             image = self._vision.Image(
                 source=self._vision.ImageSource(image_uri=image_path_or_url)

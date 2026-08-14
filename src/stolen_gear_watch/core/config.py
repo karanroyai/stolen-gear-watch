@@ -53,6 +53,17 @@ class OcrSettings(BaseModel):
     )
 
 
+class WebSearchSettings(BaseModel):
+    backend: str = Field(
+        default="none",
+        description="none (default, disabled) | google_custom_search. General keyword web "
+        "search for resale listings, filtered for retailer/new-product noise - a different "
+        "problem from reverse_image (image similarity) or ocr (text in a photo). See "
+        "web_search/google_custom_search.py.",
+    )
+    results_per_query: int = Field(default=10, ge=1, le=10)
+
+
 class TelegramSettings(BaseModel):
     enabled: bool = True
 
@@ -74,6 +85,7 @@ class Settings(BaseModel):
     scrapers: dict[str, ScraperSettings] = Field(default_factory=dict)
     reverse_image: ReverseImageSettings = ReverseImageSettings()
     ocr: OcrSettings = OcrSettings()
+    web_search: WebSearchSettings = WebSearchSettings()
     alerting: AlertingSettings = AlertingSettings()
     stolen_registries: StolenRegistrySettings = StolenRegistrySettings()
 

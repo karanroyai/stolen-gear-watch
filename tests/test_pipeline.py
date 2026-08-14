@@ -5,9 +5,11 @@ from stolen_gear_watch.core.db import Database
 from stolen_gear_watch.core.models import Match, MatchType, RawListing, RegistryHit, WatchedItem
 from stolen_gear_watch.pipeline import (
     _evaluate_listing,
+    _run_web_search,
     _send_pending_alerts,
     _send_pending_registry_alerts,
 )
+from stolen_gear_watch.web_search.google_custom_search import WebSearchResult
 
 
 def make_item(item_id="my-item"):
@@ -157,6 +159,62 @@ def test_listing_posted_after_theft_date_is_evaluated_normally(tmp_path):
         _evaluate_listing(listing, item, Settings(), db, image_backend=None, ocr=None)
 
         assert len(db.unalerted_matches()) == 1
+
+
+class _FakeWebSearch:
+    def __init__(self, results):
+        self._results = results
+
+    def search(self, query, num_results=10):
+        return self._results
+
+
+def test_web_search_none_backend_is_noop(tmp_path):
+    with Database(tmp_path / "test.db") as db:
+        _run_web_search(Settings(), [make_item()], db, web_search=None)
+        assert db.unalerted_registry_hits() == []
+
+
+def test_web_search_excludes_retailer_domain(tmp_path):
+    with Database(tmp_path / "test.db") as db:
+        fake = _FakeWebSearch(
+            [
+                WebSearchResult(
+                    title="Canon EOS R5",
+                    url="https://www.amazon.de/canon-eos-r5",
+                    display_link="www.amazon.de",
+                )
+            ]
+        )
+        _run_web_search(Settings(), [make_item()], db, web_search=fake)
+        assert db.unalerted_registry_hits() == []
+
+
+def test_web_search_excludes_accessory_result(tmp_path):
+    with Database(tmp_path / "test.db") as db:
+        fake = _FakeWebSearch(
+            [WebSearchResult(title="Case für Canon EOS R5", url="https://example.com/case")]
+        )
+        _run_web_search(Settings(), [make_item()], db, web_search=fake)
+        assert db.unalerted_registry_hits() == []
+
+
+def test_web_search_keeps_genuine_result(tmp_path):
+    with Database(tmp_path / "test.db") as db:
+        fake = _FakeWebSearch(
+            [
+                WebSearchResult(
+                    title="Canon EOS R5 for sale",
+                    url="https://example.com/listing/1",
+                    snippet="Selling my Canon EOS R5, great condition",
+                    display_link="example.com",
+                )
+            ]
+        )
+        _run_web_search(Settings(), [make_item()], db, web_search=fake)
+        hits = db.unalerted_registry_hits()
+        assert len(hits) == 1
+        assert hits[0].registry == "web_search"
 
 
 def test_listing_with_conflicting_color_is_skipped(tmp_path):
