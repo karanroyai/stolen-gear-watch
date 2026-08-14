@@ -5,6 +5,7 @@ from stolen_gear_watch.core.db import Database
 from stolen_gear_watch.core.models import Match, MatchType, RawListing, RegistryHit, WatchedItem
 from stolen_gear_watch.pipeline import (
     _evaluate_listing,
+    _run_reference_photo_search,
     _run_web_search,
     _send_pending_alerts,
     _send_pending_registry_alerts,
@@ -169,6 +170,32 @@ class _FakeWebSearch:
         return self._results
 
 
+class _FailingGeneratorWebSearch:
+    """Regression fixture: a *real* generator (yield, not return), like
+    every actual backend - this is what a plain-list fake (_FakeWebSearch
+    above) can't catch. A generator's body doesn't run until iterated, so
+    an exception raised inside it only surfaces once something actually
+    consumes the generator - exactly the bug that crashed a real
+    scheduled run when the surrounding try/except wrapped the call to
+    search() but not the iteration over its result."""
+
+    def search(self, query, num_results=10):
+        raise RuntimeError("credential missing")
+        yield  # pragma: no cover - makes this a generator function
+
+
+def test_web_search_exception_during_iteration_does_not_propagate(tmp_path):
+    """Regression test for a real incident: search() being a generator
+    means try/except around `results = web_search.search(...)` alone
+    does NOT catch errors raised during iteration - only wrapping the
+    for-loop itself does. This must not raise."""
+    with Database(tmp_path / "test.db") as db:
+        _run_web_search(
+            Settings(), [make_item()], db, web_search=_FailingGeneratorWebSearch()
+        )
+        assert db.unalerted_registry_hits() == []
+
+
 def test_web_search_none_backend_is_noop(tmp_path):
     with Database(tmp_path / "test.db") as db:
         _run_web_search(Settings(), [make_item()], db, web_search=None)
@@ -234,3 +261,55 @@ def test_listing_with_conflicting_color_is_skipped(tmp_path):
         _evaluate_listing(listing, item, Settings(), db, image_backend=None, ocr=None)
 
         assert db.unalerted_matches() == []
+
+
+class _FailingGeneratorImageBackend:
+    """Same regression fixture as _FailingGeneratorWebSearch, for the
+    other two call sites that had the identical bug: a real generator
+    (yield, not return) whose body - and therefore its exception - only
+    runs once iterated."""
+
+    def search(self, image_path_or_url):
+        raise RuntimeError("credential missing")
+        yield  # pragma: no cover - makes this a generator function
+
+
+def test_reverse_image_exception_during_iteration_does_not_propagate(tmp_path):
+    """Regression test for the same real incident, in _evaluate_listing's
+    reverse-image block."""
+    with Database(tmp_path / "test.db") as db:
+        item = make_item()
+        listing, _ = db.upsert_listing(
+            RawListing(
+                source_site="testsite",
+                source_id="1",
+                url="https://example.com/1",
+                title="something unrelated",  # weak text match -> image search path runs
+                photo_urls=["https://example.com/photo.jpg"],
+            )
+        )
+
+        _evaluate_listing(
+            listing, item, Settings(), db, image_backend=_FailingGeneratorImageBackend(), ocr=None
+        )
+
+        assert db.unalerted_matches() == []
+
+
+def test_reference_photo_search_exception_during_iteration_does_not_propagate(tmp_path):
+    """Regression test for the same real incident, in
+    _run_reference_photo_search."""
+    with Database(tmp_path / "test.db") as db:
+        item = WatchedItem(
+            id="my-item",
+            category="camera_body",
+            make="Canon",
+            model="EOS R5",
+            reference_photos=["photos/reference.jpg"],
+        )
+
+        _run_reference_photo_search(
+            Settings(), [item], db, image_backend=_FailingGeneratorImageBackend()
+        )
+
+        assert db.unalerted_registry_hits() == []
