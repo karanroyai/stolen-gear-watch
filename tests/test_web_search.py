@@ -1,15 +1,17 @@
 from stolen_gear_watch.core.config import WebSearchSettings
 from stolen_gear_watch.web_search import get_web_search
-from stolen_gear_watch.web_search.google_custom_search import is_excluded_domain
+from stolen_gear_watch.web_search.google_custom_search import _RECOMMENDED_DOMAINS
 
 
-def test_is_excluded_domain_matches_known_retailer():
-    assert is_excluded_domain("https://www.amazon.de/some-camera") is True
-    assert is_excluded_domain("bhphotovideo.com") is True
+def test_recommended_domains_within_google_limit():
+    # Google caps a Programmable Search Engine's "Sites to search" at 50
+    # domains for engines created after the Jan 2026 policy change (see
+    # module docstring) - this list has to actually fit.
+    assert len(_RECOMMENDED_DOMAINS) <= 50
 
 
-def test_is_excluded_domain_false_for_unrelated_site():
-    assert is_excluded_domain("https://www.kleinanzeigen.de/s-anzeige/123") is False
+def test_recommended_domains_has_no_duplicates():
+    assert len(_RECOMMENDED_DOMAINS) == len(set(_RECOMMENDED_DOMAINS))
 
 
 def test_get_web_search_none_by_default():

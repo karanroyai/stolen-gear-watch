@@ -24,7 +24,6 @@ from stolen_gear_watch.net import RobotsDisallowedError
 from stolen_gear_watch.reverse_image import get_backend
 from stolen_gear_watch.reverse_image.manual import ManualImageSearchBackend
 from stolen_gear_watch.web_search import get_web_search
-from stolen_gear_watch.web_search.google_custom_search import is_excluded_domain
 
 REFERENCE_PHOTO_SEARCH_REGISTRY_KEY = "reverse_image_web_search"
 WEB_SEARCH_REGISTRY_KEY = "web_search"
@@ -263,13 +262,15 @@ def _run_reference_photo_search(
 
 
 def _run_web_search(settings: Settings, active_items, db: Database, web_search) -> None:
-    """General keyword web search (Google Custom Search) for each watched
-    item, independent of any specific marketplace - catches resale
-    listings anywhere on the web, not just the sites this project has a
-    dedicated adapter for. Reuses the same accessory/color filters
-    already applied to marketplace listings, plus a domain check, since
-    a plain web search surfaces retailer/manufacturer noise a dedicated
-    adapter never sees in the first place."""
+    """Keyword web search (Google Custom Search) across a curated
+    marketplace-domain allowlist for each watched item - see
+    web_search/google_custom_search.py for why this is a curated list,
+    not whole-web search (Google discontinued that for new engines in
+    January 2026). The domain scope is configured entirely on Google's
+    side (the Programmable Search Engine's own "Sites to search"), so no
+    domain filtering happens here - just the same accessory/color
+    filters already applied to marketplace listings, since even a
+    curated classifieds-only list mixes new-in-box and used listings."""
     if web_search is None:
         return
     for item in active_items:
@@ -286,8 +287,6 @@ def _run_web_search(settings: Settings, active_items, db: Database, web_search) 
             for result in web_search.search(
                 query, num_results=settings.web_search.results_per_query
             ):
-                if is_excluded_domain(result.display_link or result.url):
-                    continue
                 haystack = f"{result.title}\n{result.snippet}"
                 if item.color and mentions_conflicting_color(haystack, item.color):
                     continue

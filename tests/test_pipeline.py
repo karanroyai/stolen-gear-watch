@@ -202,21 +202,6 @@ def test_web_search_none_backend_is_noop(tmp_path):
         assert db.unalerted_registry_hits() == []
 
 
-def test_web_search_excludes_retailer_domain(tmp_path):
-    with Database(tmp_path / "test.db") as db:
-        fake = _FakeWebSearch(
-            [
-                WebSearchResult(
-                    title="Canon EOS R5",
-                    url="https://www.amazon.de/canon-eos-r5",
-                    display_link="www.amazon.de",
-                )
-            ]
-        )
-        _run_web_search(Settings(), [make_item()], db, web_search=fake)
-        assert db.unalerted_registry_hits() == []
-
-
 def test_web_search_excludes_accessory_result(tmp_path):
     with Database(tmp_path / "test.db") as db:
         fake = _FakeWebSearch(

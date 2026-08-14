@@ -1,36 +1,51 @@
 """General keyword web search via Google's Custom Search JSON API -
 a different problem from reverse_image (given a photo, find similar
 images) or ocr (read text in a photo): given a text query, search
-Google's whole index, the way a human would type "Fujifilm X100VI" into
-google.com and skim results. Deliberately does NOT scrape
-google.com/search directly - that's explicitly out of scope for this
-project (against ToS, fragile, real risk - same reasoning as the
-Google Lens decision in reverse_image/base.py). This is the sanctioned,
-official alternative: a real Google Cloud API, not scraping.
+across a set of marketplace sites, the way a human would type
+"Fujifilm X100VI" into google.com and skim results. Deliberately does
+NOT scrape google.com/search directly - that's explicitly out of scope
+for this project (against ToS, fragile, real risk - same reasoning as
+the Google Lens decision in reverse_image/base.py). This is the
+sanctioned, official alternative: a real Google Cloud API, not scraping.
 
-Setup: enable the "Custom Search API" in a Google Cloud project, get an
-API key, and create a Programmable Search Engine at
-https://programmablesearchengine.google.com/ configured to search the
-entire web (not just specific sites) - that gives you the "cx" engine
-ID. Both go in .env as GOOGLE_CUSTOM_SEARCH_API_KEY and
-GOOGLE_CUSTOM_SEARCH_ENGINE_ID. Free for 100 queries/day, ~$5/1000
-after - at a few queries per scheduled run, this stays in the free tier
-for any reasonable run frequency.
+IMPORTANT - this is NOT whole-web search: Google discontinued the
+"search the entire web" option for newly-created Programmable Search
+Engines as of January 20, 2026 (confirmed directly - see this project's
+own investigation, not assumed). New engines are capped at a maximum of
+50 specific domains via "Sites to search"; engines that already had
+whole-web search enabled before that date keep it until January 1, 2027,
+but that doesn't help a new setup. So this module searches a *curated
+domain list*, not the internet at large.
 
-A plain web search returns a lot of noise a marketplace-specific adapter
-never has to deal with: official retailer pages, manufacturer product
-pages, review articles, forum threads. Filtering that down to "actual
-resale listings" uses two layers, same conservative philosophy as the
-rest of this project's filters (matching/color.py, matching/accessory.py) -
-only exclude on a confident signal, never on missing information:
+That constraint has a real upside, not just a downside: the curated list
+can (and does, see `_RECOMMENDED_DOMAINS` below, meant to be pasted into
+the Programmable Search Engine's "Sites to search" config, not used by
+the code itself) include OLX, Njuskalo, and Bolha - three sites this
+project explicitly declined to build direct scrapers for because they
+run active bot-detection (Cloudflare managed challenge / ShieldSquare
++hCaptcha, both confirmed live - see scrapers/ and README "Marketplace
+scraping"). Google's own crawler isn't blocked by those walls, so
+searching Google's index of those sites' public listing pages is
+meaningfully different from scraping them directly: it's not evasion,
+it's asking an official API for results Google already legitimately
+crawled.
 
-1. Query-level: `-site:` operators for a best-effort list of known
-   retailer/manufacturer domains (`_EXCLUDED_DOMAINS`), so Google itself
-   never returns most of the noise in the first place.
-2. Result-level: reruns matching/accessory.py's and matching/color.py's
-   filters against each result's title+snippet (the same checks already
-   applied to marketplace listings), plus a second domain check in case
-   a retailer isn't in the query-level list yet.
+Setup: enable the "Custom Search API" in a Google Cloud project for the
+key, and create a Programmable Search Engine at
+https://programmablesearchengine.google.com/ with `_RECOMMENDED_DOMAINS`
+(or your own list, up to 50) as its "Sites to search" for the engine ID
+("cx"). Both go in .env as GOOGLE_CUSTOM_SEARCH_API_KEY and
+GOOGLE_CUSTOM_SEARCH_ENGINE_ID. Free for 100 queries/day.
+
+Because the search scope is now controlled entirely by the Programmable
+Search Engine's own domain allowlist (configured on Google's side, not
+in this code), there's no query-time `-site:` exclusion logic here
+anymore - a curated marketplace-only domain list doesn't have the
+"official retailer/manufacturer noise" problem a genuine whole-web
+search would have had. What's still relevant and still applied: the
+same accessory/color filters already used for marketplace listings
+(matching/accessory.py, matching/color.py), since even a classifieds
+site mixes new-in-box and used listings.
 
 There's no reliable per-result post date in Custom Search's response, so
 results here aren't checked against a watched item's stolen_at the way
@@ -51,28 +66,56 @@ logger = logging.getLogger(__name__)
 
 _API_URL = "https://www.googleapis.com/customsearch/v1"
 
-# Best-effort, not exhaustive - a handful of the retailers/manufacturers
-# most likely to show up for camera gear searches. Extend as noise shows
-# up in practice, the same way matching/accessory.py's keyword lists grew.
-_EXCLUDED_DOMAINS = [
-    "amazon.com",
-    "amazon.de",
-    "amazon.co.uk",
-    "fujifilm.com",
-    "fujifilm-x.com",
-    "bhphotovideo.com",
-    "adorama.com",
-    "mediamarkt.de",
-    "mediamarkt.at",
-    "saturn.de",
-    "currys.co.uk",
-    "jpc.de",
-    "cyberport.de",
-    "conrad.de",
-    "conrad.at",
-    "calumetphoto.com",
-    "wexphotovideo.com",
-    "parkcameras.com",
+# Paste into the Programmable Search Engine's "Sites to search" - not read
+# by this module at runtime, the scope restriction happens entirely on
+# Google's side once the engine is configured with it. 38 domains, under
+# the 50-domain cap with room to add more later.
+_RECOMMENDED_DOMAINS = [
+    # Already have a dedicated adapter - included here too for backup
+    # coverage (catches things a stale selector or pagination limit missed).
+    "willhaben.at",
+    "kleinanzeigen.de",
+    "kupujemprodajem.com",
+    "publi24.ro",
+    "bazar.bg",
+    # Bot-blocked for direct scraping (Cloudflare / ShieldSquare+hCaptcha,
+    # confirmed live) - this is the main reason this feature is worth
+    # having: indirect coverage via Google's index, not evasion.
+    "olx.pl",
+    "olx.ro",
+    "olx.bg",
+    "olx.ua",
+    "olx.ba",
+    "olx.pt",
+    "njuskalo.hr",
+    "bolha.com",
+    # Serbia, experimental/unverified direct adapter (see scrapers/limundo.py).
+    "limundo.com",
+    # Other major European classifieds with no adapter at all.
+    "marktplaats.nl",
+    "2dehands.be",
+    "2ememain.be",
+    "leboncoin.fr",
+    "subito.it",
+    "milanuncios.es",
+    "tori.fi",
+    "blocket.se",
+    "dba.dk",
+    "finn.no",
+    "sbazar.cz",
+    "bazos.cz",
+    "bazos.sk",
+    "jofogas.hu",
+    "merrjep.al",
+    "pazar3.mk",
+    "gumtree.com",
+    "preloved.co.uk",
+    "vinted.com",
+    "shpock.com",
+    "quoka.de",
+    "kalaydo.de",
+    "markt.de",
+    "meinestadt.de",
 ]
 
 
@@ -101,13 +144,12 @@ class GoogleCustomSearch(PoliteHttpClient):
             self._api_key = require_env("GOOGLE_CUSTOM_SEARCH_API_KEY")
             self._engine_id = require_env("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
 
-        exclusions = " ".join(f"-site:{domain}" for domain in _EXCLUDED_DOMAINS)
         resp = self._get(
             _API_URL,
             params={
                 "key": self._api_key,
                 "cx": self._engine_id,
-                "q": f'"{query}" {exclusions}',
+                "q": f'"{query}"',
                 "num": min(num_results, 10),
             },
         )
@@ -123,8 +165,3 @@ class GoogleCustomSearch(PoliteHttpClient):
                 snippet=item.get("snippet", ""),
                 display_link=item.get("displayLink", ""),
             )
-
-
-def is_excluded_domain(url_or_domain: str) -> bool:
-    lowered = url_or_domain.lower()
-    return any(domain in lowered for domain in _EXCLUDED_DOMAINS)

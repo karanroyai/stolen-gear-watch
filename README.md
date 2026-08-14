@@ -74,7 +74,10 @@ module docstrings for the full reasoning, summarized here:
    fingerprint spoofing) to return anything - a different category of
    thing from an informed robots.txt override, and not something this
    project builds regardless of query frequency or how reasonable the
-   underlying goal is. Manual-check candidates, not future adapters.
+   underlying goal is. Manual-check candidates, not future adapters -
+   though see capability 5 below (keyword web search) for how OLX/
+   Njuškalo/Bolha coverage exists anyway, indirectly, through Google's
+   own already-crawled index rather than scraping them directly.
 
    See each adapter's module docstring for its verification status.
 
@@ -126,25 +129,41 @@ module docstrings for the full reasoning, summarized here:
      a cron job running every few hours, not fine for anything real-time.
      `pip install stolen-gear-watch[easyocr]` to enable.
 
-5. **General web search.** Everything above either targets a specific
-   marketplace or does image-based search - this is the "just Google it"
-   case: a plain keyword search (make + model) across the whole web,
-   catching resale listings on sites this project has no dedicated
-   adapter for. Deliberately does **not** scrape google.com/search
-   directly (against ToS, fragile, real risk - same reasoning as the
-   Google Lens decision above); uses the official **Custom Search JSON
-   API** instead, free for 100 queries/day. Controlled by
-   `web_search.backend` (`none` by default, `google_custom_search` to
-   enable - needs `GOOGLE_CUSTOM_SEARCH_API_KEY`/`GOOGLE_CUSTOM_SEARCH_ENGINE_ID`
-   in `.env`, the latter from a Programmable Search Engine configured to
-   search the entire web). A plain web search surfaces a lot a dedicated
-   adapter never has to deal with - official retailer pages, review
-   articles - so results get filtered two ways before becoming a match:
-   a `-site:` exclusion list for known retailers/manufacturers baked
-   into the query itself, plus the same accessory/color checks already
-   applied to marketplace listings. No post-date filtering here (`stolen_at`)
-   - Custom Search's response doesn't reliably include one, a known gap,
-   not silently worked around.
+5. **Keyword web search across a curated marketplace list.** Originally
+   built as "just Google it" across the whole web, but Google
+   **discontinued whole-web search for newly-created Programmable Search
+   Engines as of January 20, 2026** (confirmed directly, not assumed -
+   new engines are capped at 50 specific domains via "Sites to search";
+   engines that already had whole-web search before that date keep it
+   until 2027, which doesn't help a fresh setup). Deliberately does
+   **not** scrape google.com/search directly either way (against ToS,
+   fragile, real risk - same reasoning as the Google Lens decision
+   above); uses the official **Custom Search JSON API** instead, free
+   for 100 queries/day.
+
+   The 50-domain cap has a genuine upside: `web_search/google_custom_search.py`'s
+   `_RECOMMENDED_DOMAINS` (38 domains, meant to be pasted into the
+   Programmable Search Engine's "Sites to search" config) includes
+   **OLX, Njuškalo, and Bolha** - the three sites this project declined
+   to build direct scrapers for because they run active bot-detection
+   (Cloudflare / ShieldSquare+hCaptcha, confirmed live). Searching
+   Google's own index of those sites isn't evasion of anything; Google's
+   crawler already isn't blocked by those walls, so this is just asking
+   an official API for results Google legitimately already has. The rest
+   of the list rounds out coverage across other major European
+   classifieds sites with no dedicated adapter (Marktplaats, Leboncoin,
+   Subito, and others - see the module for the full list).
+
+   Controlled by `web_search.backend` (`none` by default,
+   `google_custom_search` to enable - needs
+   `GOOGLE_CUSTOM_SEARCH_API_KEY`/`GOOGLE_CUSTOM_SEARCH_ENGINE_ID` in
+   `.env`). Because the domain scope is now configured entirely on
+   Google's side, there's no query-time domain filtering in this
+   project's code - just the same accessory/color checks already applied
+   to marketplace listings, since even a curated classifieds-only list
+   mixes new-in-box and used listings. No post-date filtering here
+   (`stolen_at`) - Custom Search's response doesn't reliably include one,
+   a known gap, not silently worked around.
 
 ## Quick start
 
