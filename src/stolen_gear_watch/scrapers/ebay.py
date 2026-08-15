@@ -25,10 +25,33 @@ Requires EBAY_CLIENT_ID and EBAY_CLIENT_SECRET in .env (from a free
 developer.ebay.com account, "application access token" / client
 credentials flow - no eBay user login involved, this is app-level
 auth for public search, not acting as any particular eBay member).
-Marketplace defaults to Germany (EBAY_DE); override via EBAY_MARKETPLACE_ID
-in .env if a different eBay site is more relevant (there is no separate
-Austrian eBay site, so EBAY_DE is the closest regional default in
-Europe - a judgment call, not a verified "best" choice).
+
+Marketplaces searched are configurable via EBAY_MARKETPLACE_IDS (comma-
+separated, e.g. "EBAY_DE,EBAY_AT,EBAY_PL") and default to Germany +
+Austria + Poland - verified live (real API calls, not documentation
+guesses) to be the actual set of Central/Eastern European sites eBay
+operates. This correction matters: an earlier version of this docstring
+claimed "there is no separate Austrian eBay site" - that was wrong.
+EBAY_AT is real and, for this project's queries, returned several times
+more listings than EBAY_DE. The full set of marketplaces the Browse API
+actually supports (confirmed via a live 409 error listing them
+explicitly, not eBay's marketing docs) is: EBAY_GB, EBAY_DE, EBAY_US,
+EBAY_AU, EBAY_IT, EBAY_CA, EBAY_ES, EBAY_FR, EBAY_HK, EBAY_SG, EBAY_IE,
+EBAY_PL, EBAY_NL, EBAY_AT, EBAY_CH, EBAY_BE. Notably absent: any
+dedicated site for Czech Republic, Slovakia, Hungary, Romania, Bulgaria,
+Serbia, Croatia, Slovenia, Ukraine, the Baltics, or Greece - eBay simply
+doesn't operate local marketplaces there. Passing one of those codes
+doesn't error, it silently falls back to EBAY_US's result set (confirmed
+by comparing totals), which is worse than useless for this project, so
+don't add them here even though the country names are tempting.
+
+The legacy singular EBAY_MARKETPLACE_ID is still honored for anyone with
+it already set, but EBAY_MARKETPLACE_IDS takes precedence if both are
+present. The same physical item can appear via more than one marketplace
+query (eBay shows plenty of listings cross-border); duplicates across
+marketplaces are collapsed within a single search() call using itemId,
+and the DB layer's (source_site, source_id) uniqueness collapses any
+that slip through across separate runs.
 """
 
 from __future__ import annotations
@@ -50,6 +73,12 @@ _TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
 _SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
 _TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS = 60
 
+# Verified live against the Browse API (see module docstring) - Germany,
+# Austria, and Poland are the only genuine Central/Eastern European
+# marketplaces eBay operates. This is the default when neither
+# EBAY_MARKETPLACE_IDS nor the legacy EBAY_MARKETPLACE_ID is set.
+_DEFAULT_MARKETPLACES = ("EBAY_DE", "EBAY_AT", "EBAY_PL")
+
 
 @register_adapter
 class EbayAdapter(Adapter):
@@ -68,34 +97,51 @@ class EbayAdapter(Adapter):
     def search(self, item: WatchedItem) -> Iterator[RawListing]:
         query = " ".join(filter(None, [item.make, item.model]))
         limit = 50
-        for page in range(self.settings.max_pages):
-            resp = self._get(
-                _SEARCH_URL,
-                params={"q": query, "limit": limit, "offset": page * limit},
-                headers=self._auth_headers(),
-            )
-            data = resp.json()
-            summaries = data.get("itemSummaries", [])
-            if not summaries:
-                if page == 0:
-                    logger.info("ebay: zero results for query %r", query)
-                return
+        seen_item_ids: set[str] = set()
+        for marketplace_id in self._marketplace_ids():
+            for page in range(self.settings.max_pages):
+                resp = self._get(
+                    _SEARCH_URL,
+                    params={"q": query, "limit": limit, "offset": page * limit},
+                    headers=self._auth_headers(marketplace_id),
+                )
+                data = resp.json()
+                summaries = data.get("itemSummaries", [])
+                if not summaries:
+                    if page == 0:
+                        logger.info(
+                            "ebay: zero results for query %r on %s", query, marketplace_id
+                        )
+                    break
 
-            for summary in summaries:
-                listing = self._parse_item(summary)
-                if listing is not None:
-                    yield listing
+                for summary in summaries:
+                    item_id = summary.get("itemId")
+                    # Cross-border visibility means the same listing can
+                    # surface under more than one marketplace query - skip
+                    # re-yielding it within this same search() call.
+                    if item_id and item_id in seen_item_ids:
+                        continue
+                    listing = self._parse_item(summary)
+                    if listing is not None:
+                        if item_id:
+                            seen_item_ids.add(item_id)
+                        yield listing
 
-            if page * limit + limit >= data.get("total", 0):
-                return
+                if page * limit + limit >= data.get("total", 0):
+                    break
 
-    def _auth_headers(self) -> dict:
+    def _marketplace_ids(self) -> list[str]:
+        plural = os.environ.get("EBAY_MARKETPLACE_IDS")
+        if plural:
+            return [m.strip() for m in plural.split(",") if m.strip()]
+        # Legacy single-value override, kept for anyone with it already set.
+        singular = os.environ.get("EBAY_MARKETPLACE_ID")
+        if singular:
+            return [singular]
+        return list(_DEFAULT_MARKETPLACES)
+
+    def _auth_headers(self, marketplace_id: str) -> dict:
         token = self._get_access_token()
-        # os.environ.get(key, default) only falls back when the key is
-        # absent entirely - an empty EBAY_MARKETPLACE_ID= line in .env
-        # (present but blank, as dotenv sets it) would otherwise send an
-        # empty header value instead of actually defaulting.
-        marketplace_id = os.environ.get("EBAY_MARKETPLACE_ID") or "EBAY_DE"
         return {
             "Authorization": f"Bearer {token}",
             "X-EBAY-C-MARKETPLACE-ID": marketplace_id,
