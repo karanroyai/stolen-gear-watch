@@ -45,10 +45,8 @@ doesn't error, it silently falls back to EBAY_US's result set (confirmed
 by comparing totals), which is worse than useless for this project, so
 don't add them here even though the country names are tempting.
 
-The legacy singular EBAY_MARKETPLACE_ID is still honored for anyone with
-it already set, but EBAY_MARKETPLACE_IDS takes precedence if both are
-present. The same physical item can appear via more than one marketplace
-query (eBay shows plenty of listings cross-border); duplicates across
+The same physical item can appear via more than one marketplace query
+(eBay shows plenty of listings cross-border); duplicates across
 marketplaces are collapsed within a single search() call using itemId,
 and the DB layer's (source_site, source_id) uniqueness collapses any
 that slip through across separate runs.
@@ -75,8 +73,8 @@ _TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS = 60
 
 # Verified live against the Browse API (see module docstring) - Germany,
 # Austria, and Poland are the only genuine Central/Eastern European
-# marketplaces eBay operates. This is the default when neither
-# EBAY_MARKETPLACE_IDS nor the legacy EBAY_MARKETPLACE_ID is set.
+# marketplaces eBay operates. This is the default when EBAY_MARKETPLACE_IDS
+# is unset.
 _DEFAULT_MARKETPLACES = ("EBAY_DE", "EBAY_AT", "EBAY_PL")
 
 
@@ -131,13 +129,9 @@ class EbayAdapter(Adapter):
                     break
 
     def _marketplace_ids(self) -> list[str]:
-        plural = os.environ.get("EBAY_MARKETPLACE_IDS")
-        if plural:
-            return [m.strip() for m in plural.split(",") if m.strip()]
-        # Legacy single-value override, kept for anyone with it already set.
-        singular = os.environ.get("EBAY_MARKETPLACE_ID")
-        if singular:
-            return [singular]
+        configured = os.environ.get("EBAY_MARKETPLACE_IDS")
+        if configured:
+            return [m.strip() for m in configured.split(",") if m.strip()]
         return list(_DEFAULT_MARKETPLACES)
 
     def _auth_headers(self, marketplace_id: str) -> dict:
