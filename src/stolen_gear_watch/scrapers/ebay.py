@@ -46,16 +46,25 @@ by comparing totals), which is worse than useless for this project, so
 don't add them here even though the country names are tempting.
 
 The same physical item can appear via more than one marketplace query
-(eBay shows plenty of listings cross-border); duplicates across
-marketplaces are collapsed within a single search() call using itemId,
-and the DB layer's (source_site, source_id) uniqueness collapses any
-that slip through across separate runs.
+(eBay shows plenty of listings cross-border) - and, discovered live
+after multi-marketplace search shipped and started sending duplicate
+Telegram alerts for the same ad, `itemId` is *not* the stable identifier
+it looks like: it's `"v1|<legacyItemId>|<suffix>"`, and that suffix
+changes not just across marketplaces but across separate calls for the
+literal same listing (same legacy id, same URL, same title). 63 real
+listings had snuck into the DB as 2-6 duplicate rows each before this
+was caught. `_normalize_item_id()` keeps only the `"v1|<legacyItemId>"`
+prefix - confirmed stable across marketplaces and over time - and both
+the in-run dedup set and the persisted `source_id` use it, so the DB
+layer's (source_site, source_id) uniqueness actually holds across runs
+instead of silently not applying.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -76,6 +85,8 @@ _TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS = 60
 # marketplaces eBay operates. This is the default when EBAY_MARKETPLACE_IDS
 # is unset.
 _DEFAULT_MARKETPLACES = ("EBAY_DE", "EBAY_AT", "EBAY_PL")
+
+_ITEM_ID_STABLE_PREFIX_RE = re.compile(r"^(v1\|\d+)\|")
 
 
 @register_adapter
@@ -113,10 +124,13 @@ class EbayAdapter(Adapter):
                     break
 
                 for summary in summaries:
-                    item_id = summary.get("itemId")
+                    raw_item_id = summary.get("itemId")
+                    item_id = self._normalize_item_id(raw_item_id) if raw_item_id else None
                     # Cross-border visibility means the same listing can
                     # surface under more than one marketplace query - skip
-                    # re-yielding it within this same search() call.
+                    # re-yielding it within this same search() call. Must
+                    # compare normalized ids, not raw itemId - see module
+                    # docstring for why the raw value isn't stable enough.
                     if item_id and item_id in seen_item_ids:
                         continue
                     listing = self._parse_item(summary)
@@ -133,6 +147,14 @@ class EbayAdapter(Adapter):
         if configured:
             return [m.strip() for m in configured.split(",") if m.strip()]
         return list(_DEFAULT_MARKETPLACES)
+
+    @staticmethod
+    def _normalize_item_id(raw_item_id: str) -> str:
+        """Keep only "v1|<legacyItemId>" - see module docstring for why
+        the full raw itemId (which includes a volatile trailing suffix)
+        isn't a safe dedup/persistence key on its own."""
+        match = _ITEM_ID_STABLE_PREFIX_RE.match(raw_item_id)
+        return match.group(1) if match else raw_item_id
 
     def _auth_headers(self, marketplace_id: str) -> dict:
         token = self._get_access_token()
@@ -165,11 +187,12 @@ class EbayAdapter(Adapter):
         return self._access_token
 
     def _parse_item(self, summary: dict) -> RawListing | None:
-        source_id = summary.get("itemId")
+        raw_item_id = summary.get("itemId")
         url = summary.get("itemWebUrl")
         title = summary.get("title")
-        if not source_id or not url or not title:
+        if not raw_item_id or not url or not title:
             return None
+        source_id = self._normalize_item_id(raw_item_id)
 
         price = currency = None
         price_obj = summary.get("price")

@@ -4,7 +4,8 @@ import pytest
 import responses
 
 from stolen_gear_watch.core.config import ScraperSettings
-from stolen_gear_watch.scrapers.ebay import _TOKEN_URL, EbayAdapter
+from stolen_gear_watch.core.models import WatchedItem
+from stolen_gear_watch.scrapers.ebay import _SEARCH_URL, _TOKEN_URL, EbayAdapter
 
 # Only the deterministic parts get tested here (token caching, JSON
 # parsing) - not a live search, since this adapter was built without
@@ -83,7 +84,9 @@ def test_parse_item_builds_raw_listing():
 
     listing = adapter._parse_item(summary)
 
-    assert listing.source_id == "v1|123456789|0"
+    # Not the raw "v1|123456789|0" - see test_normalize_item_id_* below
+    # and the module docstring for why the trailing segment is dropped.
+    assert listing.source_id == "v1|123456789"
     assert listing.title == "Fujifilm X100VI Silber"
     assert listing.price == 1500.0
     assert listing.currency == "EUR"
@@ -98,3 +101,59 @@ def test_parse_item_builds_raw_listing():
 def test_parse_item_missing_required_fields_returns_none():
     adapter = make_adapter()
     assert adapter._parse_item({"title": "no id or url"}) is None
+
+
+def test_normalize_item_id_drops_volatile_suffix():
+    # Regression: this suffix was observed live to change across
+    # marketplace queries - and even across separate calls for the
+    # literal same listing - so keeping it in source_id let 63 real
+    # listings sneak into the DB as 2-6 duplicate rows each, each
+    # firing its own Telegram alert. See module docstring.
+    assert EbayAdapter._normalize_item_id("v1|366606428072|636281864207") == (
+        "v1|366606428072"
+    )
+    assert EbayAdapter._normalize_item_id("v1|366606428072|636281864203") == (
+        "v1|366606428072"
+    )
+
+
+def test_normalize_item_id_unrecognized_format_passthrough():
+    assert EbayAdapter._normalize_item_id("not-the-expected-format") == (
+        "not-the-expected-format"
+    )
+
+
+@responses.activate
+def test_search_deduplicates_same_listing_across_marketplaces(monkeypatch):
+    # Regression for the same bug as test_normalize_item_id_* above, at
+    # the search()-loop level: two marketplaces returning the "same"
+    # listing under different itemId suffixes must yield it only once.
+    monkeypatch.setenv("EBAY_MARKETPLACE_IDS", "EBAY_DE,EBAY_AT")
+    responses.add(
+        responses.POST, _TOKEN_URL, json={"access_token": "tok-1", "expires_in": 7200}
+    )
+    summary = {
+        "itemId": "v1|366606428072|636281864207",
+        "itemWebUrl": "https://www.ebay.de/itm/366606428072",
+        "title": "Fujifilm X100VI Case",
+    }
+    same_listing_other_marketplace = {
+        **summary,
+        "itemId": "v1|366606428072|636281864203",
+        "itemWebUrl": "https://www.ebay.at/itm/366606428072",
+    }
+    responses.add(
+        responses.GET, _SEARCH_URL, json={"itemSummaries": [summary], "total": 1}
+    )
+    responses.add(
+        responses.GET,
+        _SEARCH_URL,
+        json={"itemSummaries": [same_listing_other_marketplace], "total": 1},
+    )
+    adapter = make_adapter()
+    item = WatchedItem(id="x", category="camera_body", make="Fujifilm", model="X100VI")
+
+    results = list(adapter.search(item))
+
+    assert len(results) == 1
+    assert results[0].source_id == "v1|366606428072"
