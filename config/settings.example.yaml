@@ -50,6 +50,14 @@ scrapers:
     enabled: true   # Bulgaria - verified live, see scrapers/bazar_bg.py docstring
     rate_limit_seconds: 5
     max_pages: 3
+  pazar3_mk:
+    enabled: true   # North Macedonia - verified live, see scrapers/pazar3_mk.py docstring
+    rate_limit_seconds: 5
+    max_pages: 3
+  merrjep_al:
+    enabled: true   # Albania - verified live, see scrapers/merrjep_al.py docstring
+    rate_limit_seconds: 5
+    max_pages: 3
 
 reverse_image:
   # manual (default, no API key needed) | google_vision | tineye

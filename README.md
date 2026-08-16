@@ -38,7 +38,8 @@ module docstrings for the full reasoning, summarized here:
 
 2. **Marketplace scraping**, config-driven, one adapter class per site.
    Ships with Willhaben (AT), Kleinanzeigen (DE), Limundo (RS),
-   KupujemProdajem (RS), Publi24 (RO), Bazar.bg (BG), and eBay.
+   KupujemProdajem (RS), Publi24 (RO), Bazar.bg (BG), Pazar3.mk (MK),
+   Merrjep.al (AL), and eBay.
    **Willhaben is disabled by default and won't return results**: its
    robots.txt explicitly forbids automated access ("It is expressively
    forbidden to use spiders, search robots or other automatic
@@ -46,9 +47,16 @@ module docstrings for the full reasoning, summarized here:
    needs, so `Adapter._get()` refuses every request itself - this was
    verified directly against the live robots.txt, not guessed. Limundo is
    also unverified/experimental (got an HTTP 403 during testing).
-   Publi24 and Bazar.bg were both verified live (permissive robots.txt,
-   no bot-wall triggered, correctly parsed real search results across
-   several date/price format variants each). This project deliberately
+   Publi24, Bazar.bg, Pazar3.mk, and Merrjep.al were all verified live
+   (permissive robots.txt, no bot-wall triggered, correctly parsed real
+   search results including genuine Fujifilm X100VI matches). Pazar3.mk
+   and Merrjep.al run the same underlying white-label platform under
+   different domains/languages - their visible search box is a red
+   herring (a plain `?q=` URL silently returns the *unfiltered* full
+   listing set instead of erroring); the real search is a JSON AJAX
+   endpoint, found by watching actual network requests while using the
+   site, not by guessing - see
+   `scrapers/_regional_classifieds_platform.py`. This project deliberately
    does not build evasion around a blocked site; if it doesn't want to be
    scraped, treat it as a manual-check target instead. **eBay uses their
    official Browse API**, not scraping - eBay's robots.txt explicitly
@@ -56,10 +64,11 @@ module docstrings for the full reasoning, summarized here:
    HTML scraping, unlike every other site here. Needs a free
    developer.ebay.com account (`EBAY_CLIENT_ID`/`EBAY_CLIENT_SECRET` in
    `.env`); until those are set it logs a clear error each run rather
-   than crashing. Built against eBay's documented API schema but not yet
-   verified against a live response (no credentials were available to
-   test with) - see `scrapers/ebay.py`'s docstring for exactly what's
-   unconfirmed.
+   than crashing. Verified live against real responses; queries multiple
+   marketplaces per run (`EBAY_MARKETPLACE_IDS`, default
+   `EBAY_DE,EBAY_AT,EBAY_PL` - the only genuine Central/Eastern European
+   eBay sites, confirmed against the API's own list of supported
+   marketplaces) - see `scrapers/ebay.py`'s docstring.
 
    **Sites considered and rejected, not just left out**: Facebook
    Marketplace (no public API, listings require a logged-in session,

@@ -8,6 +8,8 @@ from stolen_gear_watch.scrapers import (  # noqa: F401
     kleinanzeigen,
     kupujemprodajem,
     limundo,
+    merrjep_al,
+    pazar3_mk,
     publi24,
     willhaben,
 )
